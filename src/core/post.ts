@@ -188,12 +188,13 @@ export class Post {
     private renderer: THREE.WebGLRenderer,
     scene: THREE.Scene,
     camera: THREE.Camera,
-    mobile: boolean,
+    /** skip MSAA (retina / mobile: already supersampled, and MSAA half-float targets are huge) */
+    noMsaa: boolean,
   ) {
     const size = renderer.getDrawingBufferSize(new THREE.Vector2())
     const rt = new THREE.WebGLRenderTarget(size.x, size.y, {
       type: THREE.HalfFloatType,
-      samples: mobile ? 0 : 4,
+      samples: noMsaa ? 0 : 4,
     })
     this.composer = new EffectComposer(renderer, rt)
     this.composer.addPass(new RenderPass(scene, camera))

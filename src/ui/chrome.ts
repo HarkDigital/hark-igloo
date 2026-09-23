@@ -149,7 +149,7 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
   const go = (id: string) => {
     const slot = slots.find(s => s.def.id === id)
     if (!slot) return
-    engine.gotoChapter(id, landingFor(id, slot.def.length), true)
+    engine.land(id)
   }
 
   root.addEventListener('click', e => {

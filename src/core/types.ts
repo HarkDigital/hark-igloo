@@ -86,5 +86,7 @@ export interface ChapterDef {
   label: string
   /** Scroll length in viewport heights */
   length: number
+  /** Local progress where nav jumps land (just past the cut, copy settled). Default derives from length. */
+  landing?: number
   load: () => Promise<{ default: ChapterFactory }>
 }

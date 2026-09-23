@@ -491,7 +491,7 @@ class WorkChapter implements Chapter {
     btn.type = 'button'
     btn.append(CONTACT.title.replace(/\.$/, '') + ' ')
     el('span', 'wk-arrow', '→', btn).setAttribute('aria-hidden', 'true')
-    btn.addEventListener('click', () => window.__hark?.gotoChapter('contact', 0))
+    btn.addEventListener('click', () => window.__hark?.land('contact'))
     this.finParts = [eyebrow, title, body, list, btn]
 
     REST.forEach((item, k) => {

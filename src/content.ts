@@ -320,13 +320,40 @@ export const TESTIMONIALS: Testimonial[] = [
   },
 ]
 
-/** Headline stats from the service pages. */
+/** Headline stats, verbatim from the service pages (site-v2/src/data/servicePages.ts). */
 export const STATS = [
-  { value: '10 years', label: 'Building for the web, from Philadelphia to everywhere' },
+  { value: '10 years', label: 'Of custom software for real businesses. Portals, dashboards, and integrations since 2016.' },
   { value: '15', label: 'Live sites in the portfolio right now, from dentists to global manufacturers' },
   { value: '$1M+', label: 'Flows through client stores we built, every single year' },
   { value: '24/7', label: 'Monitoring with a human who responds. Attackers don’t keep business hours.' },
 ]
+
+/** The original site's section headers — they carry "listen" through the story. */
+export const SECTIONS = {
+  work: { eyebrow: 'Selected work', title: 'Built to be heard.' },
+  services: { eyebrow: 'What we do', title: 'Eleven ways to be heard.' },
+  voices: { eyebrow: 'Client voices', title: 'We listen. They talk.' },
+}
+
+/** How every engagement runs (Software Development process, servicePages.ts). */
+export const PROCESS = [
+  { title: 'Listen', text: 'We map how work actually flows through your business, not how the org chart says it does.' },
+  { title: 'Prototype', text: 'A clickable model in weeks, not months. You react to something real before we build the real thing.' },
+  { title: 'Build', text: 'Short cycles, working software at every step. No year-long black box.' },
+  { title: 'Support', text: 'We stay after launch, updates, tweaks, and the next idea when you’re ready.' },
+]
+
+/**
+ * HUD microcopy in Hark's own "hark means listen" voice — deliberately not
+ * borrowed from igloo.inc.
+ */
+export const MICROCOPY = {
+  signalEyebrow: 'The signal',
+  scrollHint: 'Scroll to tune in',
+  audio: 'Audio',
+  audioOn: 'Live',
+  audioOff: 'Muted',
+}
 
 export const SECURITY = {
   eyebrow: 'Hack remediation · Website & data security',

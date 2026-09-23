@@ -48,6 +48,7 @@ export class Callout {
   private dot: HTMLDivElement
   side: 'left' | 'right'
   offset: { x: number; y: number }
+  private lw = 0
 
   constructor(
     parent: HTMLElement,
@@ -63,6 +64,12 @@ export class Callout {
     this.root.appendChild(this.svg)
     this.dot = el('div', 'callout-dot', undefined, this.root)
     this.label = el('div', 'callout-label', undefined, this.root)
+    // measure the label only when it actually changes size (no per-frame layout reads)
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(entries => {
+        for (const e of entries) this.lw = (e.target as HTMLElement).offsetWidth
+      }).observe(this.label)
+    }
   }
 
   /** Returns false when the point is behind the camera. */
@@ -76,7 +83,7 @@ export class Callout {
     const vis = behind || !valid ? 0 : visibility
     reveal(this.root, vis, 0)
     if (vis <= 0) return !behind && valid
-    const lw = this.label.offsetWidth
+    const lw = this.lw || (this.lw = this.label.offsetWidth)
     // flip to the other side rather than run off the edge of the screen
     const margin = 12
     let side = this.side

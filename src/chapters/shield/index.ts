@@ -131,7 +131,8 @@ function buildDom(stage: HTMLElement): Dom {
   const copy = el('div', 'sh-copy', undefined, col)
   const eyebrow = el('p', 'hud-eyebrow', '', copy)
   const title = el('h2', 'hud-title sh-title', undefined, copy)
-  const parts = SECURITY.title.split(/(?<=[?.!])\s+/)
+  // split after sentence punctuation (no lookbehind: Safari < 16.4 can't parse it)
+  const parts = SECURITY.title.match(/[^?.!]+[?.!]*/g)?.map(p => p.trim()).filter(Boolean) ?? [SECURITY.title]
   const lines: HTMLElement[] = []
   parts.forEach((part, i) => {
     const line = el('span', 'sh-line', undefined, title)

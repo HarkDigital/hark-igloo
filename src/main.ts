@@ -28,7 +28,10 @@ declare global {
       ready: boolean
       engine: Engine
       goto: (p: number) => void
+      /** exact jump (screenshots, tests) */
       gotoChapter: (id: string, local?: number) => void
+      /** visitor navigation: lands just past the cut on settled copy; long jumps cut */
+      land: (id: string, smooth?: boolean) => void
     }
   }
 }
@@ -42,14 +45,13 @@ async function boot() {
     stages.id = 'stages'
     document.body.insertBefore(stages, document.getElementById('chrome'))
   }
-  const loader = createLoader(document.getElementById('loader')!, { skip: params.has('nointro') })
-
   if (!Engine.supported()) {
     canvas.remove()
+    document.getElementById('loader')?.remove()
     renderFallback(track)
-    await loader.finish()
     return
   }
+  const loader = createLoader(document.getElementById('loader')!, { skip: params.has('nointro') })
 
   const engine = new Engine(canvas, track, stages)
   engine.assets.onProgress = (done, total) => loader.progress(total ? done / total : 0)
@@ -69,7 +71,7 @@ async function boot() {
   const hash = location.hash.slice(1)
   if (p) engine.goto(parseFloat(p))
   else if (c) engine.gotoChapter(c, parseFloat(params.get('l') ?? '0'))
-  else if (hash && CHAPTERS.some(ch => ch.id === hash)) engine.gotoChapter(hash, 0)
+  else if (hash && CHAPTERS.some(ch => ch.id === hash)) engine.land(hash, false)
   else engine.goto(0)
 
   engine.start()
@@ -78,6 +80,7 @@ async function boot() {
     engine,
     goto: p => engine.goto(p),
     gotoChapter: (id, l = 0) => engine.gotoChapter(id, l),
+    land: (id, smooth = true) => engine.land(id, smooth),
   }
   if (params.has('debug')) mountDebug(engine)
 

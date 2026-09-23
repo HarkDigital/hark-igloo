@@ -147,7 +147,7 @@ export class HeroUI {
     work.type = 'button'
     work.append('See the work ')
     el('span', 'hero-arrow', '→', work).setAttribute('aria-hidden', 'true')
-    work.addEventListener('click', () => window.__hark?.gotoChapter('work', 0))
+    work.addEventListener('click', () => window.__hark?.land('work'))
     const start = el('a', 'hud-btn hud-btn--ghost', 'Start a project', this.ctas)
     start.href = CONTACT.href
   }
