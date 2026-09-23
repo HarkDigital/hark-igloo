@@ -17,12 +17,16 @@ Copy, services, portfolio and testimonials come from the 2026 site
 | # | Chapter | What happens |
 |---|---------|--------------|
 | 01 | **Signal** (`hero`) | The mark as a hologram above a planet horizon → orbiting debris bricks assemble it → it resolves into polished obsidian with a glowing diamond → *Make the internet listen.* |
-| 02 | **Orbit** (`services`) | Emerge from the core into an orrery: 11 service worlds, each focused in turn |
-| 03 | **Shield** (`shield`) | Attacks strike a planetary hex shield → *Hacked? Breathe.* → 24/7 calm |
-| 04 | **Artifacts** (`work`) | Six featured projects sealed in glass crystals, then a ring of the nine more |
-| 05 | **Transmissions** (`voices`) | Client testimonials decoded from a pulsar signal |
-| 06 | **Gate** (`portal`) | A segmented ring gate dials in, the core becomes an event horizon, warp |
+| 02 | **Artifacts** (`work`) | *Built to be heard.* Six featured projects sealed in glass crystals, then a ring of the nine more |
+| 03 | **Orbit** (`services`) | *Eleven ways to be heard.* Emerge from the core into an orrery: 11 service worlds, each focused in turn |
+| 04 | **Shield** (`shield`) | Attacks strike a planetary hex shield → *Hacked? Breathe.* → 24/7 calm |
+| 05 | **Transmissions** (`voices`) | *We listen. They talk.* Client testimonials decoded from a pulsar signal |
+| 06 | **Gate** (`portal`) | *How we work:* the ring gate's four keystones lock as Listen · Prototype · Build · Support, with the real stats, then warp |
 | 07 | **Arrival** (`contact`) | The mark as a particle cloud over a holographic platform — *Say hello.* |
+
+Phones held sideways get a "turn your phone upright" screen. Screen readers and
+keyboard users get the whole story as linear semantic HTML (`src/core/srContent.ts`),
+and the visuals follow keyboard focus.
 
 ## Run it
 

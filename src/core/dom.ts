@@ -93,6 +93,11 @@ export class Callout {
     const lx = x + dx
     const ly = y + this.offset.y
     const elbow = x + dx * 0.35
+    // offsets computed by chapters before first layout can be NaN — never write them
+    if (!Number.isFinite(lx + ly + elbow + lw)) {
+      reveal(this.root, 0, 0)
+      return true
+    }
     this.path.setAttribute('d', `M${x},${y} L${elbow},${ly} L${lx},${ly}`)
     this.dot.style.transform = `translate3d(${x}px, ${y}px, 0)`
     const labelX = side === 'right' ? lx + 8 : lx - 8 - lw

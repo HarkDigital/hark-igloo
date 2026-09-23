@@ -88,6 +88,10 @@ export class Probe {
       lx -= tx - maxX
       tx = maxX
     }
+    if (!Number.isFinite(ex + ly + lx + tx)) {
+      reveal(this.root, 0, 0)
+      return
+    }
     this.path.setAttribute('d', `M${x.toFixed(1)},${y.toFixed(1)} L${ex.toFixed(1)},${ly.toFixed(1)} L${lx.toFixed(1)},${ly.toFixed(1)}`)
     this.dot.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`
     this.label.style.transform = `translate3d(${tx.toFixed(1)}px, ${(ly - 9).toFixed(1)}px, 0)`

@@ -32,7 +32,29 @@ const CUT_WINDOW = 0.22
 /** Render-pixel budget: 4K/5K windows would otherwise push 15+ MP through bloom. */
 const PIXEL_BUDGET = 6e6
 
-const nextFrame = () => new Promise<void>(r => requestAnimationFrame(() => r()))
+/**
+ * Yield to the browser between heavy boot steps so the loader can paint.
+ * rAF never fires in a hidden/background tab, so there we yield with a
+ * macrotask instead (and a timeout guards a tab hidden mid-wait).
+ */
+const nextFrame = () =>
+  new Promise<void>(resolve => {
+    let done = false
+    const r = () => {
+      if (!done) {
+        done = true
+        resolve()
+      }
+    }
+    if (document.hidden) {
+      const ch = new MessageChannel()
+      ch.port1.onmessage = r
+      ch.port2.postMessage(0)
+      return
+    }
+    requestAnimationFrame(r)
+    setTimeout(r, 150)
+  })
 
 function emptyChapter(id: string): Chapter {
   return {
