@@ -71,3 +71,66 @@ float hash11(float p) { p = fract(p * .1031); p *= p + 33.33; p *= p + p; return
 export function ringMatrix(): THREE.Matrix4 {
   return new THREE.Matrix4().makeRotationZ(-0.2).multiply(new THREE.Matrix4().makeRotationX(0.34))
 }
+
+/** Contour tolerance for simplifyShape, in mark units (the mark is 1 unit tall). */
+export const CONTOUR_EPS = 2e-6
+
+/**
+ * Douglas–Peucker on a closed ring. The SVG import samples every Bézier at a
+ * fixed count, so long straight bars and tiny corner curves carry thousands of
+ * near-collinear points (median spacing ~0.0003 of the mark's height). At
+ * CONTOUR_EPS the contour moves by far less than a pixel even in the final
+ * dive, curves keep the same facet angles as before, and the extrusion and
+ * face fill have about half the vertices to triangulate, build and shade.
+ */
+export function simplifyRing(src: THREE.Vector2[], eps: number): THREE.Vector2[] {
+  const pts = src.slice()
+  if (pts.length > 1 && pts[0].distanceToSquared(pts[pts.length - 1]) < 1e-18) pts.pop()
+  const n = pts.length
+  if (n < 8) return pts
+  const keep = new Uint8Array(n)
+  // split the ring at the two points farthest apart, then simplify each half
+  let far = 0
+  let fd = 0
+  for (let i = 1; i < n; i++) {
+    const d = pts[i].distanceToSquared(pts[0])
+    if (d > fd) {
+      fd = d
+      far = i
+    }
+  }
+  keep[0] = keep[far] = 1
+  const stack: [number, number][] = [
+    [0, far],
+    [far, n],
+  ]
+  while (stack.length) {
+    const [a, b] = stack.pop()!
+    const A = pts[a]
+    const B = pts[b % n]
+    const dx = B.x - A.x
+    const dy = B.y - A.y
+    const len = Math.hypot(dx, dy)
+    let best = -1
+    let bd = eps
+    for (let i = a + 1; i < b; i++) {
+      const P = pts[i]
+      const d = len < 1e-12 ? Math.hypot(P.x - A.x, P.y - A.y) : Math.abs(dx * (P.y - A.y) - dy * (P.x - A.x)) / len
+      if (d > bd) {
+        bd = d
+        best = i
+      }
+    }
+    if (best >= 0) {
+      keep[best] = 1
+      stack.push([a, best], [best, b])
+    }
+  }
+  return pts.filter((_, i) => keep[i] === 1)
+}
+
+export function simplifyShape(s: THREE.Shape, eps: number): THREE.Shape {
+  const out = new THREE.Shape(simplifyRing(s.getPoints(1), eps))
+  for (const h of s.holes) out.holes.push(new THREE.Path(simplifyRing(h.getPoints(1), eps)))
+  return out
+}

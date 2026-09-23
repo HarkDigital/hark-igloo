@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import type { Chapter, ChapterContext, Frame } from '../../core/types'
-import { clamp, ease, lerp, segment, smoothstep, window01 } from '../../core/math'
+import { clamp, ease, lerp, segment, smoothstep } from '../../core/math'
 import { OrbitScene } from './scene'
 import { ServicesHud } from './hud'
 import {
@@ -24,16 +24,25 @@ import {
 import './services.css'
 
 /*
- * ORBIT — the services chapter.
+ * ORBIT — the services chapter (4.6 viewport heights, between Work and Shield).
  *
- *  0.00–0.07  emerge from the glowing diamond of the Hark mark (the star core)
- *             and pull back to reveal the whole orrery
- *  0.07–0.13  establishing shot: 11 worlds on tilted instrument rings, intro copy
- *  0.13–0.94  each service in turn (≈0.074 each): the camera arcs around the star
- *             to the next world, which swings forward; panel, callout and rail
- *             crossfade + decode, all derived from local
- *  0.94–1.00  accelerate past the last world toward a distant hex-glinting planet
+ *  0.000–0.065  Work's out-beat collapses to a bright point; we emerge from that
+ *               glare, the glowing diamond of the Hark mark (the star core), and
+ *               pull back to reveal the whole orrery
+ *  0.065–0.105  establishing shot: 11 worlds on tilted instrument rings, intro
+ *               ("What we do · Eleven ways to be heard.")
+ *  0.105–0.935  each service in turn (≈0.075 each): the camera holds on a world,
+ *               then arcs around the star to the next. The panel names a world
+ *               only while the camera is locked on it; mid-flight it collapses
+ *               to an "IN TRANSIT 05 → 06" readout
+ *  0.935–1.000  accelerate past the last world toward a distant hex-glinting
+ *               planet, which Shield picks up
  */
+
+/** Camera-lock thresholds on the eased focus coordinate (with hysteresis). */
+const LOCK_IN = 0.1
+const LOCK_OUT = 0.15
+
 export default function create(): Chapter {
   const group = new THREE.Group()
   let scene: OrbitScene | null = null
@@ -55,6 +64,8 @@ export default function create(): Chapter {
   const sphere = new THREE.Sphere()
   let hover = -1
   let canvas: HTMLCanvasElement | null = null
+  /** world the camera is locked on (-1 = in transit / establishing) */
+  let lockK = -1
 
   const viewOf = (frame: Frame): View => {
     const aspect = frame.width / Math.max(1, frame.height)
@@ -158,7 +169,7 @@ export default function create(): Chapter {
       fw = frame.width
       fh = frame.height
       const v = viewOf(frame)
-      hud.compact = frame.width < 768
+      hud.compact = frame.width < 768 || v.portrait
 
       const Fc = computePose(local, v, pose)
       const F = focusCoord(local)
@@ -172,20 +183,22 @@ export default function create(): Chapter {
       }
 
       // ---- what should be on screen (the HUD tweens it in/out in time) ----
-      const kF = clamp(Math.round(F), 0, COUNT - 1)
-      const dF = F - kF
-      const panelOn = local >= TL.s0 - 0.008 && local < TL.s1 + 0.008
-      const holding = dF > -0.32 && (dF < 0.32 || (kF === COUNT - 1 && local < TL.s1))
-      for (let k = 0; k < COUNT; k++) {
-        const near = 1 - smoothstep(0.3, 0.62, Math.abs(F - k))
-        labels[k] = 1 - near
-      }
-      const reticleVis =
-        Math.min(smoothstep(-0.42, -0.2, dF), 1 - smoothstep(0.3, 0.48, dF)) *
-        window01(local, TL.s0 - 0.01, TL.s1 + 0.01, 0.02)
+      // Copy follows the CAMERA, not the scroll slot: a world is named only
+      // while the eased camera is locked on it, so wherever the scroll rests
+      // the panel agrees with the picture. The exit leg stays on the last world.
+      const Fl = Math.min(Fc, COUNT - 1)
+      const nearK = Math.round(Fl)
+      const dLock = Math.abs(Fl - nearK)
+      lockK = nearK >= 0 && (dLock < LOCK_IN || (nearK === lockK && dLock < LOCK_OUT)) ? nearK : -1
+      const leg = Math.floor(Fl)
+      const legT = clamp((Fl - leg - LOCK_IN) / (1 - 2 * LOCK_IN))
+      const kF = clamp(nearK, 0, COUNT - 1)
+      const panelOn = Fc > -0.88 && local < TL.s1 + 0.006
+      for (let k = 0; k < COUNT; k++) labels[k] = smoothstep(0.1, 0.3, Math.abs(Fc - k))
+      const reticleVis = (1 - smoothstep(0.06, 0.16, Math.abs(Fl - kF))) * (1 - smoothstep(TL.s1, TL.s1 + 0.014, local))
 
       // ---- post + sky: energetic in/out beats, calm holds ----
-      const inBeat = 1 - smoothstep(0, 0.055, local)
+      const inBeat = 1 - smoothstep(0, 0.048, local)
       const out = segment(local, TL.s1, 1)
       const travel = Math.sin(Math.PI * (Fc - Math.floor(Fc))) * (local > TL.s0 && local < TL.s1 ? 1 : 0)
       const p = ctx.post.params
@@ -208,7 +221,7 @@ export default function create(): Chapter {
         reticleVis,
         heal: segment(local, focusCenter(HACK) - 0.45 * SLOT, focusCenter(HACK) + 0.38 * SLOT),
         coreHeat: 1 + 0.35 * inBeat * inBeat,
-        orbitMaster: smoothstep(0.012, 0.06, local) * (1 - 0.5 * out),
+        orbitMaster: smoothstep(0.01, 0.05, local) * (1 - 0.5 * out),
         farHex: 0.16 + 0.5 * smoothstep(0.9, 1, local),
         pxWorld: (2 * tanV) / Math.max(1, frame.height),
         pxScale: (frame.height * ctx.renderer.getPixelRatio()) / (2 * tanV),
@@ -216,14 +229,17 @@ export default function create(): Chapter {
 
       hud.update({
         local,
-        F,
         dt: frame.dt,
         calm: ctx.reducedMotion,
-        introOn: local >= 0.036 && local < TL.s0 - 0.008,
+        introOn: local >= 0.034 && Fc <= -0.88,
         panelOn,
-        railOn: local >= TL.s0 - 0.012 && local < TL.s1 + 0.008,
-        calloutOn: panelOn && local < TL.s1 && holding,
-        labelsOn: local > 0.035 && local < TL.s1 - 0.004,
+        lock: lockK,
+        leg,
+        legT,
+        near: kF,
+        railOn: Fc > -0.9 && local < TL.s1 + 0.006,
+        calloutOn: panelOn && local < TL.s1 && lockK >= 0,
+        labelsOn: local > 0.03 && local < TL.s1 - 0.004,
         progress: clamp((F + 0.5) / COUNT),
         labels,
         theta,

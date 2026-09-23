@@ -9,9 +9,20 @@
   /* bottom band sits lower so index + rail + telemetry always clear
      var(--safe-bottom) by ~10px (chapter copy lives above that line) */
   --ch-yb: clamp(16px, 2.4vh, 30px);
+  /* the bands step inside the notch / Dynamic Island / home indicator
+     (index.html sets viewport-fit=cover) */
+  --ch-top: max(var(--ch-y), env(safe-area-inset-top, 0px));
+  --ch-bot: max(var(--ch-yb), env(safe-area-inset-bottom, 0px) + 6px);
+  --ch-l: max(var(--gutter), env(safe-area-inset-left, 0px));
+  --ch-r: max(var(--gutter), env(safe-area-inset-right, 0px));
+  --ch-edge-t: max(12px, env(safe-area-inset-top, 0px));
+  --ch-edge-b: max(12px, env(safe-area-inset-bottom, 0px));
+  --ch-edge-l: max(12px, env(safe-area-inset-left, 0px));
+  --ch-edge-r: max(12px, env(safe-area-inset-right, 0px));
   --ch-ink: var(--paper);
-  --ch-dim: rgba(242, 246, 244, 0.62);
-  --ch-faint: rgba(242, 246, 244, 0.3);
+  /* small mono type on --ink: dim ≈ 8.1:1, faint ≈ 5.3:1 (both ≥ 4.5:1) */
+  --ch-dim: rgba(242, 246, 244, 0.66);
+  --ch-faint: rgba(242, 246, 244, 0.52);
   --ch-ease: cubic-bezier(0.2, 0.7, 0.1, 1);
   position: absolute;
   inset: 0;
@@ -97,26 +108,26 @@
     border-color 0.4s ease;
 }
 .ch-corner--tl {
-  top: 12px;
-  left: 12px;
+  top: var(--ch-edge-t);
+  left: var(--ch-edge-l);
   border-width: 1px 0 0 1px;
   transform-origin: 0 0;
 }
 .ch-corner--tr {
-  top: 12px;
-  right: 12px;
+  top: var(--ch-edge-t);
+  right: var(--ch-edge-r);
   border-width: 1px 1px 0 0;
   transform-origin: 100% 0;
 }
 .ch-corner--bl {
-  bottom: 12px;
-  left: 12px;
+  bottom: var(--ch-edge-b);
+  left: var(--ch-edge-l);
   border-width: 0 0 1px 1px;
   transform-origin: 0 100%;
 }
 .ch-corner--br {
-  bottom: 12px;
-  right: 12px;
+  bottom: var(--ch-edge-b);
+  right: var(--ch-edge-r);
   border-width: 0 1px 1px 0;
   transform-origin: 100% 100%;
 }
@@ -130,10 +141,10 @@
   transition: opacity 1.2s ease 0.6s;
 }
 .ch-edge--l {
-  left: 12px;
+  left: var(--ch-edge-l);
 }
 .ch-edge--r {
-  right: 12px;
+  right: var(--ch-edge-r);
 }
 .is-in .ch-corner {
   opacity: 1;
@@ -177,9 +188,9 @@
 .ch-top {
   position: absolute;
   z-index: 3;
-  top: var(--ch-y);
-  left: var(--gutter);
-  right: var(--gutter);
+  top: var(--ch-top);
+  left: var(--ch-l);
+  right: var(--ch-r);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -297,13 +308,6 @@
   opacity: 1;
   transform: none;
 }
-.ch-link-ix {
-  font-size: 8px;
-  letter-spacing: 0.1em;
-  color: var(--ch-faint);
-  transform: translateY(-3px);
-  transition: color 0.25s ease;
-}
 .ch-link-txt {
   min-width: 1ch;
 }
@@ -323,11 +327,6 @@
 .ch-link:focus-visible,
 .ch-link.is-active {
   color: var(--ch-ink);
-}
-.ch-link:hover .ch-link-ix,
-.ch-link:focus-visible .ch-link-ix,
-.ch-link.is-active .ch-link-ix {
-  color: var(--signal);
 }
 .ch-link:hover::after,
 .ch-link:focus-visible::after,
@@ -398,7 +397,7 @@
 }
 .ch-cta:hover .ch-cta-arrow,
 .ch-cta:focus-visible .ch-cta-arrow {
-  transform: translate(2px, -2px);
+  transform: translateX(3px);
 }
 @keyframes ch-pulse {
   0%,
@@ -462,6 +461,19 @@
   transform: rotate(-45deg);
   width: 16px;
 }
+/* The dialog carries its own Close button, drawn exactly where MENU sits (the
+   header's tallest item, so its top is the band's top). They swap instantly:
+   MENU hides as the dialog opens, Close hides the moment it starts closing. */
+.ch-menu-close {
+  position: absolute;
+  z-index: 1;
+  top: var(--ch-top);
+  right: var(--ch-r);
+}
+.chrome:not(.is-menu) .ch-menu-close,
+.is-menu .ch-top .ch-menu-btn {
+  visibility: hidden;
+}
 
 /* full-screen overlay menu (mobile) */
 .ch-menu {
@@ -471,7 +483,7 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: var(--safe-top) var(--gutter) calc(var(--safe-bottom) * 0.6);
+  padding: var(--safe-top) var(--ch-r) calc(var(--safe-bottom) * 0.6) var(--ch-l);
   background: rgba(2, 3, 4, 0.9);
   backdrop-filter: blur(18px) saturate(1.1);
   -webkit-backdrop-filter: blur(18px) saturate(1.1);
@@ -483,7 +495,8 @@
   display: none;
 }
 /* the page is scroll-locked (Lenis stopped) while the menu is open; stop touch
-   drags on the overlay from scrolling the story underneath */
+   drags on the overlay from scrolling the story underneath. On short screens
+   the menu scrolls itself (data-lenis-prevent lets its wheel/touch through). */
 .ch-menu {
   touch-action: none;
   overscroll-behavior: contain;
@@ -498,19 +511,13 @@
 .is-menu .ch-menu {
   opacity: 1;
 }
-.ch-menu::before {
-  /* faint orbit arc behind the links */
-  content: '';
-  position: absolute;
-  right: -45vw;
-  top: 50%;
-  width: 90vw;
-  height: 90vw;
-  margin-top: -45vw;
-  border: 1px solid rgba(0, 255, 133, 0.14);
-  border-radius: 50%;
-  box-shadow: 0 0 80px rgba(0, 255, 133, 0.06);
-  pointer-events: none;
+/* faint orbit arc behind the links, drawn as a background so it never adds
+   scrollable overflow when the dialog scrolls on short screens */
+.ch-menu {
+  background:
+    radial-gradient(circle 45vw at 100% 50%, rgba(0, 255, 133, 0) calc(100% - 1.2px), rgba(0, 255, 133, 0.2) calc(100% - 0.4px), rgba(0, 255, 133, 0) 100%),
+    radial-gradient(circle calc(45vw + 60px) at 100% 50%, rgba(0, 255, 133, 0) calc(100% - 120px), rgba(0, 255, 133, 0.035) calc(100% - 60px), rgba(0, 255, 133, 0) 100%),
+    rgba(2, 3, 4, 0.9);
 }
 .ch-menu-inner {
   position: relative;
@@ -542,17 +549,28 @@
   transform: none;
 }
 .ch-menu-link {
+  position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 14px;
-  padding: 18px 0 16px;
+  padding: 22px 0 16px;
   text-decoration: none;
   color: var(--paper);
 }
-.ch-menu-ix {
-  padding-top: 6px;
-  font-size: 10px;
-  letter-spacing: 0.14em;
+/* the chapter's poetic name, same pairing as the bottom index line; it rides
+   the row's top-right corner, above the word, so long words never push it out */
+.ch-menu-tag {
+  position: absolute;
+  top: 8px;
+  right: 0;
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  line-height: 1;
+  text-transform: uppercase;
+  color: var(--ch-dim);
+  transition: color 0.25s ease;
+}
+.ch-menu-link:active .ch-menu-tag,
+.ch-menu-link:focus-visible .ch-menu-tag {
   color: var(--signal);
 }
 .ch-menu-txt {
@@ -597,15 +615,35 @@
   text-transform: uppercase;
   color: var(--ch-dim);
 }
+/* short screens (small laptop windows, tablets in split view): size the list
+   by height too so the CTA stays in view; the dialog scrolls if it must */
+@media (max-height: 560px) {
+  .ch-menu-eyebrow {
+    margin-bottom: 12px;
+  }
+  .ch-menu-link {
+    padding: 16px 0 8px;
+  }
+  .ch-menu-tag {
+    top: 5px;
+  }
+  .ch-menu-txt {
+    font-size: clamp(22px, 8vh, 40px);
+  }
+  .ch-menu-foot {
+    margin-top: 18px;
+    gap: 12px;
+  }
+}
 
 /* ----------------------------------------------------------------- bottom */
 
 .ch-bottom {
   position: absolute;
   z-index: 1;
-  left: var(--gutter);
-  right: var(--gutter);
-  bottom: var(--ch-yb);
+  left: var(--ch-l);
+  right: var(--ch-r);
+  bottom: var(--ch-bot);
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -642,7 +680,8 @@
 }
 .ch-sound-state {
   display: inline-block;
-  min-width: 3ch;
+  /* fits MUTED / LIVE without the label shifting */
+  min-width: 5ch;
   margin-left: -2px;
   color: var(--ch-ink);
 }
@@ -737,6 +776,12 @@
   display: inline-block;
   color: var(--ch-ink);
 }
+/* the plain business name beside the poetic chapter label */
+.ch-ix-plain {
+  display: inline-block;
+  margin-left: -1px;
+  color: var(--ch-dim);
+}
 
 .ch-rail {
   --p: 0;
@@ -754,7 +799,7 @@
   height: 1px;
 }
 .ch-rail-track {
-  background: rgba(242, 246, 244, 0.22);
+  background: rgba(242, 246, 244, 0.26);
   box-shadow: 0 0 6px rgba(2, 3, 4, 0.8);
 }
 .ch-rail-fill {
@@ -775,12 +820,14 @@
     0 0 6px 1px var(--signal),
     0 0 14px 2px rgba(0, 255, 133, 0.45);
 }
+/* 24 × 24 transparent hit area around a 1px mark; ticks are evenly spaced
+   (≥ 25px apart at the rail's narrowest desktop width) so targets never overlap */
 .ch-tick {
   position: absolute;
-  top: 0;
-  width: 15px;
-  height: 16px;
-  margin-left: -7px;
+  top: -4px;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -789,7 +836,7 @@
   display: block;
   width: 1px;
   height: 7px;
-  background: rgba(242, 246, 244, 0.34);
+  background: rgba(242, 246, 244, 0.44);
   transition:
     height 0.3s var(--ch-ease),
     background 0.3s ease;
@@ -811,7 +858,7 @@
   /* sits over the index line so it never strays into chapter copy */
   content: attr(data-label);
   position: absolute;
-  bottom: calc(100% + 3px);
+  bottom: calc(100% - 1px);
   left: 50%;
   padding: 4px 8px;
   font-size: 9px;
@@ -914,6 +961,28 @@
   }
   .ch-edge {
     display: none;
+  }
+}
+/* phones: the rail is a progress readout only (navigation lives in the MENU),
+   so no tiny tap targets; the index line gets its own row above the band so
+   "05 / 07 — TRANSMISSIONS · CLIENTS" never collides with the audio toggle */
+@media (max-width: 600px) {
+  /* #chrome prefix: base.css re-enables pointer-events on #chrome buttons */
+  #chrome .ch-rail,
+  #chrome .ch-tick {
+    pointer-events: none;
+  }
+  .ch-index {
+    position: relative;
+  }
+  /* sits just above the audio toggle's text (the rail row is shorter) */
+  .ch-index-line {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 9px);
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    gap: 7px;
   }
 }
 @media (max-width: 420px) {
@@ -1263,7 +1332,7 @@
   font-weight: 500;
   letter-spacing: 0.2em;
   line-height: 1;
-  color: rgba(242, 246, 244, 0.42);
+  color: rgba(242, 246, 244, 0.6);
   white-space: nowrap;
   animation: ld-fade 1.2s ease 0.3s both;
   transition: opacity 0.3s ease;
@@ -1313,4 +1382,626 @@
   .ld-corner--bl {
     display: none;
   }
+}
+
+/* ============================================================ rotate gate */
+/* Phones held sideways (short + touch-first + landscape) get a full-screen
+   card asking for portrait. Pure CSS decides when it shows; rotate.ts makes
+   the page behind it inert and announces it. It sits above the loader. */
+
+.rot {
+  --rot-ease: cubic-bezier(0.65, 0, 0.2, 1);
+  outline: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: max(20px, env(safe-area-inset-top, 0px)) max(28px, env(safe-area-inset-right, 0px))
+    max(20px, env(safe-area-inset-bottom, 0px)) max(28px, env(safe-area-inset-left, 0px));
+  background:
+    radial-gradient(ellipse 60% 70% at 50% 46%, rgba(0, 255, 133, 0.075), rgba(0, 255, 133, 0) 70%),
+    radial-gradient(ellipse 120% 90% at 50% 50%, #06090a, var(--ink) 70%);
+  color: var(--paper);
+  font-family: var(--font-mono);
+  text-align: center;
+  touch-action: none;
+  overscroll-behavior: contain;
+  -webkit-user-select: none;
+  user-select: none;
+}
+@media (orientation: landscape) and (max-height: 500px) and (pointer: coarse) {
+  .rot {
+    display: flex;
+  }
+}
+
+/* viewfinder corners, like the chrome */
+.rot-corner {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 0 solid rgba(242, 246, 244, 0.4);
+}
+.rot-corner--tl {
+  top: max(12px, env(safe-area-inset-top, 0px));
+  left: max(12px, env(safe-area-inset-left, 0px));
+  border-width: 1px 0 0 1px;
+}
+.rot-corner--tr {
+  top: max(12px, env(safe-area-inset-top, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  border-width: 1px 1px 0 0;
+}
+.rot-corner--bl {
+  bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  left: max(12px, env(safe-area-inset-left, 0px));
+  border-width: 0 0 1px 1px;
+}
+.rot-corner--br {
+  bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  border-width: 0 1px 1px 0;
+}
+
+.rot-brand {
+  position: absolute;
+  top: max(22px, env(safe-area-inset-top, 0px) + 10px);
+  left: max(30px, env(safe-area-inset-left, 0px) + 12px);
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 0;
+}
+.rot-brand-mark {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+.rot-brand-svg,
+.rot-mark {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.rot-brand-svg .mk-loop,
+.rot-mark .mk-loop {
+  fill: currentColor;
+}
+.rot-brand-svg .mk-diamond,
+.rot-mark .mk-diamond {
+  fill: var(--signal);
+}
+.rot-word {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0.24em;
+  white-space: nowrap;
+}
+.rot-word i {
+  font-style: normal;
+  color: var(--signal);
+  letter-spacing: 0.12em;
+}
+
+.rot-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* a phone outline turning from landscape to portrait, the mark on its screen */
+.rot-icon {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  margin: -6px 0 2px;
+}
+.rot-arrow {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.rot-arrow path {
+  fill: none;
+  stroke: var(--signal);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px rgba(0, 255, 133, 0.6));
+}
+.rot-arc {
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+  animation: rot-arc 3.4s var(--rot-ease) infinite;
+}
+.rot-head {
+  opacity: 0;
+  animation: rot-head 3.4s var(--rot-ease) infinite;
+}
+.rot-phone {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 32px;
+  height: 54px;
+  margin: -27px 0 0 -16px;
+  border: 1.5px solid var(--paper);
+  border-radius: 7px;
+  box-shadow: 0 0 18px rgba(0, 255, 133, 0.12);
+  transform: rotate(-90deg);
+  animation: rot-turn 3.4s var(--rot-ease) infinite;
+}
+/* speaker slot */
+.rot-phone::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 4px;
+  width: 8px;
+  height: 1.5px;
+  margin-left: -4px;
+  border-radius: 1px;
+  background: rgba(242, 246, 244, 0.55);
+}
+.rot-screen {
+  position: absolute;
+  inset: 10px 5px;
+  display: grid;
+  place-items: center;
+  color: var(--paper);
+}
+.rot-screen .rot-mark {
+  width: 15px;
+  height: 15px;
+  transform: rotate(90deg);
+  animation: rot-counter 3.4s var(--rot-ease) infinite;
+}
+.rot-mark .mk-diamond {
+  animation: rot-lock 3.4s ease infinite;
+}
+/* turn clockwise into portrait, hold, then fade (never spin back) and
+   reappear sideways for the next pass */
+@keyframes rot-turn {
+  0%,
+  22% {
+    transform: rotate(-90deg);
+    opacity: 1;
+  }
+  48%,
+  84% {
+    transform: rotate(0deg);
+    opacity: 1;
+  }
+  92% {
+    transform: rotate(0deg);
+    opacity: 0;
+  }
+  93% {
+    transform: rotate(-90deg);
+    opacity: 0;
+  }
+  100% {
+    transform: rotate(-90deg);
+    opacity: 1;
+  }
+}
+/* the mark stays upright while the phone turns under it */
+@keyframes rot-counter {
+  0%,
+  22% {
+    transform: rotate(90deg);
+  }
+  48%,
+  92% {
+    transform: rotate(0deg);
+  }
+  93%,
+  100% {
+    transform: rotate(90deg);
+  }
+}
+@keyframes rot-arc {
+  0%,
+  16% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+  }
+  46% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  80%,
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+@keyframes rot-head {
+  0%,
+  38% {
+    opacity: 0;
+  }
+  46%,
+  62% {
+    opacity: 1;
+  }
+  80%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes rot-lock {
+  0%,
+  44% {
+    filter: none;
+  }
+  54%,
+  86% {
+    filter: drop-shadow(0 0 70px rgba(0, 255, 133, 0.95));
+  }
+  100% {
+    filter: none;
+  }
+}
+
+.rot-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(19px, 3vw, 25px);
+  line-height: 1;
+  letter-spacing: 0.005em;
+  text-transform: uppercase;
+}
+.rot-sub {
+  margin: 12px 0 0;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: rgba(242, 246, 244, 0.7);
+}
+.rot-sub span {
+  color: var(--signal);
+}
+.rot-foot {
+  position: absolute;
+  bottom: max(22px, env(safe-area-inset-bottom, 0px) + 8px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  line-height: 1;
+  color: rgba(242, 246, 244, 0.6);
+}
+.rot-foot b {
+  font-weight: 500;
+  color: var(--signal);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* a still: the phone already upright, both arrows showing the turn */
+  .rot-phone,
+  .rot-screen .rot-mark,
+  .rot-arc,
+  .rot-head,
+  .rot-mark .mk-diamond {
+    animation: none;
+  }
+  .rot-phone,
+  .rot-screen .rot-mark {
+    transform: none;
+  }
+  .rot-arc {
+    stroke-dashoffset: 0;
+  }
+  .rot-head {
+    opacity: 1;
+  }
+}
+
+/* ======================================================= no-WebGL fallback */
+/* Plain, linear version of the story (src/ui/fallback.ts). Same tokens and
+   HUD vocabulary as the live site, laid out as an ordinary scrolling page. */
+
+.fb {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 max(24px, env(safe-area-inset-right, 0px)) 56px max(24px, env(safe-area-inset-left, 0px));
+  color: var(--paper);
+}
+.fb :focus-visible {
+  outline: 1px solid var(--signal);
+  outline-offset: 4px;
+}
+.fb-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  padding: max(24px, env(safe-area-inset-top, 0px)) 0 20px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono);
+}
+.fb-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--paper);
+  text-decoration: none;
+}
+.fb-mark {
+  display: block;
+  width: 28px;
+  height: 28px;
+}
+.fb-mark-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.fb-mark-svg .mk-loop {
+  fill: currentColor;
+}
+.fb-mark-svg .mk-diamond {
+  fill: var(--signal);
+}
+.fb-word {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: 0.26em;
+  white-space: nowrap;
+}
+.fb-word i {
+  font-style: normal;
+  color: var(--signal);
+  letter-spacing: 0.12em;
+}
+.fb-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px 26px;
+  flex-wrap: wrap;
+}
+.fb-link {
+  padding: 8px 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: rgba(242, 246, 244, 0.72);
+}
+.fb-link:hover {
+  color: var(--paper);
+}
+.fb-cta {
+  padding: 11px 16px;
+  border: 1px solid var(--signal);
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-decoration: none;
+  white-space: nowrap;
+  color: var(--signal);
+}
+.fb-cta:hover {
+  background: var(--signal);
+  color: var(--ink);
+}
+@media (max-width: 640px) {
+  .fb-link,
+  .fb-cta span {
+    display: none;
+  }
+  .fb-top {
+    flex-wrap: nowrap;
+    gap: 12px;
+  }
+  .fb-brand {
+    gap: 10px;
+  }
+  .fb-mark {
+    width: 24px;
+    height: 24px;
+  }
+  .fb-word {
+    font-size: 12px;
+    letter-spacing: 0.22em;
+  }
+  .fb-cta {
+    padding: 10px 13px;
+    letter-spacing: 0.12em;
+  }
+}
+
+.fb-hero {
+  padding: clamp(56px, 12vh, 120px) 0 clamp(16px, 3vh, 40px);
+}
+.fb-hero .hud-title {
+  margin: 18px 0 24px;
+  font-size: clamp(2.6rem, 9vw, 7.5rem);
+}
+.fb-lede {
+  max-width: 52ch;
+}
+.fb-sec {
+  padding: clamp(48px, 9vh, 96px) 0 0;
+}
+.fb-sec .hud-h2 {
+  margin: 14px 0 32px;
+}
+.fb-actions {
+  margin: 28px 0 0;
+}
+
+.fb-work {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 32px 24px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--paper);
+  text-decoration: none;
+}
+.fb-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  transition: border-color 0.25s ease;
+}
+.fb-card:hover img,
+.fb-card:focus-visible img {
+  border-color: var(--signal);
+}
+.fb-card-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 16px;
+}
+.fb-card .hud-label {
+  font-size: 10px;
+}
+
+.fb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0 40px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fb-grid--4 {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+.fb-cell {
+  padding: 22px 0 26px;
+  border-top: 1px solid var(--line);
+}
+.fb-num {
+  margin: 0 0 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--signal);
+}
+.fb-h3 {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 19px;
+  line-height: 1.15;
+}
+.fb-cell .hud-body {
+  font-size: 15px;
+}
+
+.fb-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 24px 40px;
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.fb-stats li {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fb-stat {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(28px, 3vw, 38px);
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--signal);
+}
+.fb-stat-l {
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(242, 246, 244, 0.72);
+}
+
+.fb-quotes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 0 48px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.fb-quote {
+  margin: 0;
+  padding: 24px 0 28px;
+  border-top: 1px solid var(--line);
+}
+.fb-quote blockquote {
+  margin: 0 0 14px;
+}
+.fb-quote blockquote p {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.55;
+  color: rgba(242, 246, 244, 0.86);
+}
+.fb-quote .hud-label {
+  font-size: 10px;
+}
+@media (max-width: 420px) {
+  .fb-quotes {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fb-contact .hud-title {
+  margin: 16px 0 24px;
+}
+.fb-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-top: clamp(56px, 10vh, 110px);
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(242, 246, 244, 0.66);
+}
+.fb-foot p {
+  margin: 0;
+}
+.fb-foot a {
+  color: var(--paper);
+  text-underline-offset: 4px;
+  text-decoration-color: var(--signal);
 }

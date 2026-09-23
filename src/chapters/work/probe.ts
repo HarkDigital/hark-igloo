@@ -32,6 +32,15 @@ export class Probe {
     this.width = 0
   }
 
+  /** The label's box (measured once, then cached until invalidate()). */
+  size() {
+    if (!this.width) {
+      this.width = this.label.offsetWidth
+      this.height = this.label.offsetHeight
+    }
+    return { w: this.width, h: this.height }
+  }
+
   /**
    * x,y: anchor in CSS px. dir: +1 label to the right, -1 to the left.
    * dx/dy: leader length. pad: min distance to the viewport edge.
@@ -52,11 +61,7 @@ export class Probe {
     if (!Number.isFinite(x) || !Number.isFinite(y)) vis = 0
     reveal(this.root, vis, 0)
     if (vis <= 0.002) return
-    if (!this.width) {
-      this.width = this.label.offsetWidth
-      this.height = this.label.offsetHeight
-    }
-    const lw = this.width
+    const lw = this.size().w
     if (avoid) {
       // steer clear of a HUD block: first lift the label above the anchor,
       // and only if that still collides, flip it to the other side

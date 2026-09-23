@@ -85,6 +85,21 @@ function impulse(ctx: AudioContext, seconds: number, decay: number) {
   return buf
 }
 
+/**
+ * iOS routes Web Audio through the "ambient" session, which the ring/silent
+ * switch mutes. Safari 16.4+ lets a page opt into "playback" (plays with the
+ * switch on, like a video would); hand it back to "auto" when muted so we
+ * never hold the session for nothing. Feature-detected; a no-op elsewhere.
+ */
+function setAudioSession(type: 'playback' | 'auto') {
+  try {
+    const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession
+    if (session && session.type !== type) session.type = type
+  } catch {
+    /* unsupported type / locked down */
+  }
+}
+
 export class Sound {
   enabled = false
   onChange: ((enabled: boolean) => void)[] = []
@@ -248,6 +263,7 @@ export class Sound {
     } catch {
       /* ignore */
     }
+    setAudioSession(on ? 'playback' : 'auto')
     if (on) this.ensureGraph()
     this.applyRunning()
     for (const fn of this.onChange) fn(on)

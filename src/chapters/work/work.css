@@ -291,23 +291,50 @@
   color: rgba(242, 246, 244, 0.72);
 }
 
-/* ---- intro stamp */
-.stage-work .wk-intro {
+/* ---- section headline (holds the card slot until the first artifact) */
+.stage-work .wk-head {
   position: absolute;
-  inset: 0;
+  top: var(--safe-top);
+  bottom: var(--safe-bottom);
+  left: var(--gutter);
+  width: min(560px, 40vw);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  pointer-events: none;
+  visibility: hidden;
+}
+.stage-work .wk-head > * {
+  will-change: transform, opacity;
+}
+.stage-work .wk-head-eyebrow {
+  margin: 0;
+}
+.stage-work .wk-head-title {
+  margin: 18px 0 22px;
+  font-size: clamp(2.3rem, 4vw, 4.2rem);
+  white-space: pre-wrap;
+  min-height: 1.9em;
+}
+.stage-work .wk-head-sub {
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding-top: 34vh;
-  pointer-events: none;
-}
-.stage-work .wk-intro-text {
+  gap: 12px;
+  margin: 0;
   font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.42em;
-  color: var(--paper);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(242, 246, 244, 0.8);
   white-space: pre;
-  text-shadow: 0 0 18px rgba(0, 255, 133, 0.6);
+  text-shadow: 0 0 14px rgba(0, 255, 133, 0.35), 0 1px 10px rgba(2, 3, 4, 0.9);
+}
+.stage-work .wk-head-sub::before {
+  content: '';
+  flex: 0 0 36px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--signal), rgba(0, 255, 133, 0));
 }
 
 .stage-work .wk-scrim {
@@ -402,9 +429,26 @@
     margin-right: 0;
     text-indent: 0;
   }
-  .stage-work .wk-intro-text {
-    font-size: 10px;
-    letter-spacing: 0.3em;
+  .stage-work .wk-head {
+    top: auto;
+    bottom: calc(var(--safe-bottom) - 6px);
+    left: var(--gutter);
+    right: var(--gutter);
+    width: auto;
+    display: block;
+  }
+  .stage-work .wk-head-title {
+    margin: 12px 0 14px;
+    font-size: clamp(2rem, 9.4vw, 3rem);
+    min-height: 0;
+  }
+  .stage-work .wk-head-sub {
+    gap: 10px;
+    font-size: 9.5px;
+    letter-spacing: 0.18em;
+  }
+  .stage-work .wk-head-sub::before {
+    flex-basis: 20px;
   }
   .stage-work .wk-shade {
     display: none;
@@ -428,5 +472,19 @@
   .stage-work .wk-tr-next {
     font-size: 9px;
     letter-spacing: 0.22em;
+  }
+}
+
+/* ---- short portrait phones (e.g. 375x667): keep the finale card below the ring */
+@media (max-width: 759px) and (max-height: 740px), (max-aspect-ratio: 1/1) and (max-height: 740px) {
+  .stage-work .wk-fin-title {
+    margin: 8px 0 12px;
+  }
+  .stage-work .wk-fin-body {
+    display: none;
+  }
+  .stage-work .wk-list {
+    gap: 4px 12px;
+    margin-bottom: 14px;
   }
 }

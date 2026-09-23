@@ -9,17 +9,16 @@
   position: absolute;
   left: var(--gutter);
   bottom: var(--safe-bottom);
-  width: min(560px, 44vw);
+  width: min(720px, 56vw);
 }
 .stage-services .svc-intro-title {
-  font-size: clamp(2.6rem, 4.6vw, 4.6rem);
-  margin: 14px 0 16px;
-}
-.stage-services .svc-intro-body {
-  max-width: 44ch;
+  /* "Eleven ways / to be heard." — two balanced lines on desktop */
+  font-size: clamp(2.4rem, 4.2vw, 4.4rem);
+  margin: 14px 0 0;
+  text-wrap: balance;
 }
 .stage-services .svc-intro-meta {
-  margin: 18px 0 0;
+  margin: 20px 0 0;
   color: var(--faint);
 }
 
@@ -50,6 +49,11 @@
 .stage-services .svc-stack {
   display: grid;
   align-items: start;
+  /* clip while the frame eases between heights; the padding (STACK_PAD in
+     hud.ts) keeps glow and the reveal nudge inside the clip */
+  overflow: hidden;
+  margin: -8px -10px;
+  padding: 8px 10px;
   transition: height 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .stage-services .svc-item {
@@ -111,6 +115,65 @@
 .stage-services .svc-tags .hud-tag {
   font-size: 9.5px;
   padding: 4px 9px;
+}
+
+/* transit readout: IN TRANSIT · 05 → 06, leg progress, next stop */
+.stage-services .svc-transit .svc-item-head {
+  margin-bottom: 12px;
+}
+.stage-services .svc-tr-route {
+  color: rgba(242, 246, 244, 0.72);
+  white-space: pre;
+}
+.stage-services .svc-tr-track {
+  --p: 0;
+  --in: 0;
+  position: relative;
+  height: 5px;
+}
+.stage-services .svc-tr-track::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 2px;
+  height: 1px;
+  background: var(--line-strong);
+  transform-origin: 0 50%;
+  transform: scaleX(var(--in));
+}
+.stage-services .svc-tr-fill {
+  position: absolute;
+  left: 0;
+  top: 2px;
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(90deg, rgba(0, 255, 133, 0.15), var(--signal));
+  transform-origin: 0 50%;
+  transform: scaleX(calc(var(--p) * var(--in)));
+}
+.stage-services .svc-tr-dot {
+  position: absolute;
+  top: 0;
+  left: calc(var(--p) * var(--in) * (100% - 5px));
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: var(--signal-glow);
+  opacity: var(--in);
+}
+.stage-services .svc-tr-next {
+  margin: 12px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ---------------- index rail ---------------- */
@@ -223,8 +286,9 @@
   white-space: pre;
 }
 
-/* ---------------- mobile: bottom sheet ---------------- */
-@media (max-width: 767px) {
+/* ---------------- phones + portrait tablets: bottom sheet + number strip ----
+   (matches the camera's own portrait framing, viewOf(): aspect < 0.9) */
+@media (max-width: 767px), (max-aspect-ratio: 9/10) {
   .stage-services {
     --svc-panel-w: auto;
   }
@@ -233,15 +297,16 @@
     width: auto;
   }
   .stage-services .svc-intro-title {
-    /* Syne 800 caps run ~0.95em per glyph: keep all 8 inside the gutters */
-    font-size: min(11vw, 3.6rem);
-    margin: 10px 0 12px;
+    /* Syne 800 caps run ~0.95em per glyph: three balanced lines on a phone */
+    font-size: min(10.4vw, 3.6rem);
+    margin: 10px 0 0;
   }
-  .stage-services .svc-intro-body {
-    font-size: 14px;
+  .stage-services .svc-intro-meta {
+    margin-top: 14px;
   }
   .stage-services .svc-panel {
     right: var(--gutter);
+    max-width: 620px;
     padding: 16px 16px 18px;
   }
   .stage-services .svc-item-head {
@@ -308,7 +373,47 @@
   }
 }
 
-@media (max-height: 700px) and (min-width: 768px) {
+/* short phones (iPhone SE class): a tighter sheet so the world keeps the top half */
+@media (max-width: 767px) and (max-height: 700px) {
+  .stage-services .svc-panel {
+    padding: 14px 14px 15px;
+  }
+  .stage-services .svc-item-head {
+    margin-bottom: 8px;
+  }
+  .stage-services .svc-title {
+    font-size: clamp(1.2rem, 5.8vw, 1.45rem);
+  }
+  .stage-services .svc-rule {
+    margin: 10px 0 8px;
+  }
+  .stage-services .svc-blurb {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .stage-services .svc-tags {
+    padding-top: 10px;
+  }
+  .stage-services .svc-tags .hud-tag {
+    font-size: 9px;
+    padding: 3px 8px;
+  }
+}
+
+/* portrait tablets: same sheet, roomier type */
+@media (max-aspect-ratio: 9/10) and (min-width: 600px) {
+  .stage-services .svc-panel {
+    padding: 20px 24px 22px;
+  }
+  .stage-services .svc-title {
+    font-size: clamp(1.6rem, 4.4vw, 2.2rem);
+  }
+  .stage-services .svc-blurb {
+    font-size: 15px;
+  }
+}
+
+@media (max-height: 700px) and (min-width: 768px) and (min-aspect-ratio: 9/10) {
   .stage-services .svc-blurb {
     font-size: 13px;
   }

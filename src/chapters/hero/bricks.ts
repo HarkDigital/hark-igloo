@@ -28,26 +28,64 @@ export interface BrickInfo {
 
 type Poly = { outer: THREE.Vector2[]; holes: THREE.Vector2[][] }
 
-function pointInPoly(x: number, y: number, poly: THREE.Vector2[]) {
-  let inside = false
-  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-    const xi = poly[i].x,
-      yi = poly[i].y,
-      xj = poly[j].x,
-      yj = poly[j].y
-    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside
+/**
+ * Occupancy of the 45° brick lattice, by scanline fill. Every contour is
+ * rotated into lattice space (u along the bars, v across) once; then each row's
+ * centre line is intersected with the edges of each shape (outer + holes, so an
+ * even-odd fill cuts the holes out) and the cells between crossing pairs are
+ * filled. Shapes are unioned. O(rows × edges) instead of the old per-cell
+ * point-in-polygon test, which was O(cells × edges) and the hero's biggest
+ * boot cost. Returns a (2n)² grid indexed [(j + n) * 2n + (i + n)].
+ */
+function voxelize(polys: Poly[], c: number, n: number, R: number) {
+  const size = 2 * n
+  const occ = new Uint8Array(size * size)
+  const shapes = polys.map(p => {
+    const rings = [p.outer, ...p.holes]
+    let m = 0
+    for (const r of rings) m += r.length
+    // edges as (u0, v0, u1, v1), lattice space
+    const e = new Float64Array(m * 4)
+    let vMin = Infinity
+    let vMax = -Infinity
+    let k = 0
+    for (const r of rings) {
+      for (let a = 0, b = r.length - 1; a < r.length; b = a++) {
+        const ua = (r[a].x + r[a].y) * R
+        const va = (r[a].y - r[a].x) * R
+        e[k++] = (r[b].x + r[b].y) * R
+        e[k++] = (r[b].y - r[b].x) * R
+        e[k++] = ua
+        e[k++] = va
+        if (va < vMin) vMin = va
+        if (va > vMax) vMax = va
+      }
+    }
+    return { e, vMin, vMax }
+  })
+  const xs: number[] = []
+  for (let j = -n; j < n; j++) {
+    const v = (j + 0.5) * c
+    const row = (j + n) * size
+    for (const s of shapes) {
+      if (v < s.vMin || v > s.vMax) continue
+      const e = s.e
+      xs.length = 0
+      for (let k = 0; k < e.length; k += 4) {
+        const v0 = e[k + 1]
+        const v1 = e[k + 3]
+        if (v0 > v !== v1 > v) xs.push(e[k] + ((v - v0) * (e[k + 2] - e[k])) / (v1 - v0))
+      }
+      xs.sort((a, b) => a - b)
+      for (let q = 0; q + 1 < xs.length; q += 2) {
+        // cells whose centre (i + 0.5)·c lies strictly between the crossings
+        const i0 = Math.max(-n, Math.floor(xs[q] / c - 0.5) + 1)
+        const i1 = Math.min(n - 1, Math.ceil(xs[q + 1] / c - 0.5) - 1)
+        for (let i = i0; i <= i1; i++) occ[row + i + n] = 1
+      }
+    }
   }
-  return inside
-}
-
-function insideAny(x: number, y: number, polys: Poly[]) {
-  for (const p of polys) {
-    if (!pointInPoly(x, y, p.outer)) continue
-    let hole = false
-    for (const h of p.holes) if (pointInPoly(x, y, h)) hole = true
-    if (!hole) return true
-  }
-  return false
+  return (i: number, j: number) => i >= -n && i < n && j >= -n && j < n && occ[(j + n) * size + i + n] === 1
 }
 
 const VERT = /* glsl */ `
@@ -215,15 +253,8 @@ export class Bricks {
     const dz = MARK_DEPTH / layers
     const R = Math.SQRT1_2
     const n = Math.ceil(0.74 / c)
-    const occ = new Set<number>()
-    const key = (i: number, j: number) => (i + 512) * 2048 + (j + 512)
     const toXY = (u: number, v: number) => [(u - v) * R, (u + v) * R] as const
-    for (let i = -n; i < n; i++) {
-      for (let j = -n; j < n; j++) {
-        const [x, y] = toXY((i + 0.5) * c, (j + 0.5) * c)
-        if (insideAny(x, y, polys)) occ.add(key(i, j))
-      }
-    }
+    const occupied = voxelize(polys, c, n, R)
 
     type Raw = { x: number; y: number; z: number; su: number; layer: number }
     const raw: Raw[] = []
@@ -234,9 +265,9 @@ export class Bricks {
         const offset = (j + k) & 1
         const used = new Set<number>()
         for (let i = -n; i < n; i++) {
-          if (!occ.has(key(i, j)) || used.has(i)) continue
+          if (!occupied(i, j) || used.has(i)) continue
           const pairStart = (((i - offset) % 2) + 2) % 2 === 0
-          if (pairStart && occ.has(key(i + 1, j))) {
+          if (pairStart && occupied(i + 1, j)) {
             used.add(i).add(i + 1)
             const [x, y] = toXY((i + 1) * c, (j + 0.5) * c)
             raw.push({ x, y, z, su: 2 * c - gap, layer: k })

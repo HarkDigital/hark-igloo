@@ -11,12 +11,14 @@ import { MARK_SCALE, T } from './shared'
 import './hero.css'
 
 /*
- * HERO — "Signal". Our take on igloo.inc's opening:
+ * HERO — "Signal". Hark means listen: the mark is picked up as a faint signal
+ * and tuned in until it comes through loud and clear.
  *   0.00–0.08  SIGNAL    hologram of the mark over a planet, constellation network
- *   0.08–0.55  ASSEMBLY  debris belt → bricks spiral in and lock (green flash → gunmetal)
- *   0.55–0.75  RESOLVE   scan-line dissolve into the polished chrome mark + signal core
- *   0.75–0.94  PAYOFF    pull back over the horizon, "Make the internet listen."
- *   0.94–1.00  OUT       dive into the glowing core → cut to Services
+ *   0.08–0.49  TUNING IN debris belt → bricks spiral in and lock on (green flash → gunmetal)
+ *   0.49–0.66  CLEAR     scan-line dissolve into the polished chrome mark + signal core
+ *   0.68–0.93  PAYOFF    pull back over the horizon, "Make the internet listen."
+ *   0.93–1.00  OUT       dive into the glowing core → flash cut into the Work
+ *                        chapter's field of crystal artifacts
  */
 
 const MARK_POS = new THREE.Vector3(0, 0.3, 0)

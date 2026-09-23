@@ -204,6 +204,8 @@ void main() {
 export interface CrystalUniforms {
   [k: string]: THREE.IUniform
   uMap: THREE.IUniform<THREE.Texture>
+  /** 0 = no screenshot yet (dark glass, powered but no signal), 1 = the site shows */
+  uReady: THREE.IUniform<number>
   uPanel: THREE.IUniform<THREE.Vector2>
   uCamObj: THREE.IUniform<THREE.Vector3>
   uRot: THREE.IUniform<THREE.Matrix3>
@@ -217,6 +219,7 @@ export interface CrystalUniforms {
 
 const CRYSTAL_FRAG = /* glsl */ `
 uniform sampler2D uMap;
+uniform float uReady;
 uniform vec2 uPanel;
 uniform vec3 uCamObj;
 uniform mat3 uRot;
@@ -241,7 +244,11 @@ ${EDGES}
 vec3 panelShade(vec2 uv, vec2 dx, vec2 dy, float back) {
   // a gentle negative LOD bias (the anisotropic filter keeps it clean) so the
   // sealed site reads crisp instead of one mip too soft
-  vec3 tex = textureGrad(uMap, uv, dx * 0.7, dy * 0.7).rgb;
+  vec3 tex = textureGrad(uMap, uv, dx * 0.7, dy * 0.7).rgb * uReady;
+  // until the screenshot streams in: a faint carrier grid on dark glass
+  vec2 gq = abs(fract(uv * vec2(16.0, 10.0)) - 0.5);
+  float grid = smoothstep(0.47, 0.5, max(gq.x, gq.y));
+  tex += SIGNAL * grid * 0.05 * (1.0 - uReady);
   float lum = dot(tex, vec3(0.2126, 0.7152, 0.0722));
   vec3 dormant = vec3(lum) * vec3(0.5, 1.0, 0.8) * 0.12 + SIGNAL * 0.004;
   // soft shoulder: white page areas sit under the bloom threshold, so the
@@ -274,7 +281,7 @@ vec3 transmit(vec3 V, vec3 N, float eta, out float hit) {
   vec3 p = panelShade(clamp(uv, 0.0, 1.0), dx, dy, step(0.0, rz));
   // internal reflections: mirrored ghosts of the panel beyond its edges
   vec2 m = 1.0 - abs(mod(uv, 2.0) - 1.0);
-  vec3 gt = textureGrad(uMap, m, dx * 2.0, dy * 2.0).rgb;
+  vec3 gt = textureGrad(uMap, m, dx * 2.0, dy * 2.0).rgb * uReady;
   float gl = dot(gt, vec3(0.2126, 0.7152, 0.0722));
   float od = length(max(abs(uv - 0.5) - 0.5, 0.0));
   vec3 ghost = mix(vec3(gl) * vec3(0.5, 1.0, 0.85), gt, 0.4) * 0.2 * exp(-od * 1.8) * (0.3 + 0.7 * uActive) * uGlow;
@@ -378,6 +385,7 @@ const _inv = new THREE.Matrix4()
 export function createCrystal(hull: Hull, map: THREE.Texture, panelHalf: THREE.Vector2, seed: number, hq: boolean): Crystal {
   const uniforms: CrystalUniforms = {
     uMap: { value: map },
+    uReady: { value: 0 },
     uPanel: { value: panelHalf.clone() },
     uCamObj: { value: new THREE.Vector3() },
     uRot: { value: new THREE.Matrix3() },

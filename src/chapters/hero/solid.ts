@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { logoGeometry, logoParts } from '../../logo/logo'
 import { NOISE } from '../../core/glsl'
-import { COLOR_GLSL, DISSOLVE_Y_GAIN, ENV_GLSL, MARK_DEPTH } from './shared'
+import { COLOR_GLSL, CONTOUR_EPS, DISSOLVE_Y_GAIN, ENV_GLSL, MARK_DEPTH, simplifyShape } from './shared'
 
 /*
  * The resolved mark: polished obsidian-chrome loops (MeshPhysicalMaterial on a
@@ -145,7 +145,7 @@ export class Solid {
     const envMap = buildEnv(renderer)
 
     const geo = logoGeometry({
-      shapes: [...parts.loopA, ...parts.loopB],
+      shapes: [...parts.loopA, ...parts.loopB].map(sh => simplifyShape(sh, CONTOUR_EPS)),
       depth: MARK_DEPTH - 0.02,
       bevelSize: 0.011,
       bevelThickness: 0.013,

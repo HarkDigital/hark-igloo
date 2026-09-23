@@ -1,6 +1,7 @@
 import { scrambleAt } from '../core/scramble'
 import { MARK_PATHS, MARK_VIEWBOX } from './mark'
 import { BRAND } from '../content'
+import { mountRotateGate } from './rotate'
 
 /*
  * Boot screen: the Hark mark traced as a stroked outline inside an orbit ring,
@@ -29,6 +30,8 @@ const STATUS: [number, string][] = [
 const wait = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
 export function createLoader(root: HTMLElement, { skip = false } = {}) {
+  // phones held sideways get the rotate card from the very first frame
+  mountRotateGate()
   if (skip) {
     root.remove()
     return { progress() {}, finish: () => Promise.resolve() }

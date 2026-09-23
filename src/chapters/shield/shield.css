@@ -184,6 +184,16 @@
 
 /* ---------- 3D-anchored callouts ---------- */
 
+.stage-shield .sh-callout .callout-label {
+  /* a quiet plate: labels often sit over the bright hex rim or the bloom.
+     index.ts places them assuming this box starts 14px above the leader. */
+  margin-top: -4px;
+  padding: 5px 10px 5px 9px;
+  background: rgba(2, 3, 4, 0.52);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border-radius: 2px;
+}
 .stage-shield .sh-callout-alert .callout-dot {
   border-color: var(--sh-alert);
   box-shadow: 0 0 14px rgba(255, 59, 92, 0.75);
@@ -212,6 +222,31 @@
 }
 .stage-shield .sh-ok {
   color: var(--signal);
+}
+.stage-shield .sh-callout .sh-sub {
+  transition: color 0.3s ease;
+}
+.stage-shield .is-inbound .sh-sub,
+.stage-shield .sh-callout-signal .sh-sub {
+  color: var(--signal);
+}
+.stage-shield .sh-callout-signal .callout-svg path {
+  stroke: rgba(0, 255, 133, 0.7);
+}
+
+/* ---------- squarer landscape (4:3, 5:4, iPad): a narrower column so the
+   pulled-back sphere keeps clear air beside the headline ---------- */
+
+@media (min-width: 761px) and (min-aspect-ratio: 1/1) and (max-aspect-ratio: 3/2) {
+  .stage-shield .sh-col {
+    width: min(560px, 44vw);
+  }
+  .stage-shield .sh-title {
+    font-size: clamp(2.2rem, 4.6vw, 5.2rem);
+  }
+  .stage-shield .sh-stat-v {
+    font-size: clamp(4rem, 9.4vw, 9rem);
+  }
 }
 
 @keyframes sh-blink {

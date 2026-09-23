@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import './work.css'
 import type { CameraPose, Chapter, ChapterContext, Frame } from '../../core/types'
-import { CONTACT, STATS, WORK, workImage, type WorkItem } from '../../content'
+import { CONTACT, SECTIONS, STATS, WORK, workImage, type WorkItem } from '../../content'
 import { clamp, ease, lerp, segment, smoothstep } from '../../core/math'
 import { el, reveal } from '../../core/dom'
 import { scrambleAt } from '../../core/scramble'
@@ -15,6 +15,7 @@ import {
   createShardField,
   crystalPoints,
   type Crystal,
+  type CrystalUniforms,
   type Dust,
   type Field,
   type Flare,
@@ -26,8 +27,11 @@ import { Probe } from './probe'
  * WORK — "Artifacts".
  *
  * Storyboard (local progress):
- *   0.00–0.06  in-beat: the camera punches into a drifting field of crystal
- *              debris (warp streaks, flash) and settles on the first artifact
+ *   0.00–0.06  in-beat: out of the hero's flash, the camera punches into a
+ *              drifting field of crystal debris (warp streaks) and settles on
+ *              the first artifact
+ *   0.00–0.10  the section headline ("Selected work / Built to be heard.")
+ *              holds the card slot; the first artifact's HUD takes it over
  *   0.06–0.84  six featured projects, 0.13 each: the camera slaloms from
  *              crystal to crystal; each one rotates to present the site
  *              sealed inside it, the hologram boots (scan sweep), the HUD
@@ -35,7 +39,10 @@ import { Probe } from './probe'
  *   0.84–0.955 "Nine more, all live." — the other nine sites orbit a small
  *              planet as a ring of labelled shards
  *   0.955–1.0  out-beat: the ring, the planet and the debris collapse into a
- *              single bright point (next: incoming transmissions)
+ *              single blazing point (next: services opens out of a hot core)
+ *
+ * Screenshots stream in after the reveal (the first one right away): every
+ * crystal starts as dark glass and fades its site in when the image lands.
  */
 
 const FEATURED = WORK.filter(w => w.featured).slice(0, 6)
@@ -53,7 +60,8 @@ const centerOf = (i: number) => F0 + FW * (i + 0.5)
 /** a project's HUD is on while |l - center| < SHOW·FW (generous: ~72% of its slot) */
 const SHOW = 0.36
 const HYST = 0.015
-const INTRO_END = centerOf(0) - SHOW * FW
+/** the section headline owns the card slot until here; the first artifact's HUD after */
+const INTRO_END = 0.1
 const FIN_ON = 0.856
 
 // ---- world layout
@@ -80,7 +88,18 @@ const host = (url: string) => {
     return url.toUpperCase()
   }
 }
+/** staging builds (not launched yet) are labelled as previews, never as live */
+const isPreview = (url: string) => {
+  try {
+    return /(^|\.)harktest\.com$/i.test(new URL(url).hostname)
+  } catch {
+    return false
+  }
+}
+const srcOf = (item: WorkItem) => (isPreview(item.url) ? `SRC // ${item.name.toUpperCase()}` : `SRC // ${host(item.url)}`)
 const pad2 = (n: number) => String(n).padStart(2, '0')
+/** do [a0,a1] and [b0,b1] overlap once b is grown by `margin` on both sides? */
+const overlaps = (a0: number, a1: number, b0: number, b1: number, margin: number) => a0 < b1 + margin && a1 > b0 - margin
 const code = (i: number) => `ARTIFACT_${pad2(i + 1)}`
 
 /**
@@ -184,7 +203,12 @@ interface Layout {
   stations: Station[]
 }
 
-function computeLayout(w: number, h: number, spans: { w: number; h: number }[]): Layout {
+/**
+ * finTop: top of the finale card in px. On the portrait sheet the ring is
+ * framed into the band between the header and that card, so the nine (and
+ * their numbers) never sit under the card's copy on short phones.
+ */
+function computeLayout(w: number, h: number, spans: { w: number; h: number }[], finTop = 0): Layout {
   const aspect = w / h
   const sheet = w < 760 || aspect <= 1
   const stations: Station[] = []
@@ -202,8 +226,17 @@ function computeLayout(w: number, h: number, spans: { w: number; h: number }[]):
   e.fov = stations[1].fov + 26
   // finale: the ring of nine around the planet
   const ringW = RING_R * 2 * 1.32 + 1.2
-  if (sheet) frameAt(FIN, FIN_DIR, ringW, ringW * 0.62, aspect, 50, 0.98, 0.36, 0, 0.36, stations[NF + 1])
-  else frameAt(FIN, FIN_DIR, ringW, ringW * 0.62, aspect, 38, 0.48, 0.52, 0.25, 0.13, stations[NF + 1])
+  if (sheet) {
+    let cover = 0.36
+    let oy = 0.36
+    const top = Math.max(64, h * 0.09) + 14
+    if (finTop > top + 120) {
+      const bottom = finTop - 14
+      cover = (bottom - top) / h
+      oy = 1 - (top + bottom) / h
+    }
+    frameAt(FIN, FIN_DIR, ringW, ringW * 0.62, aspect, 50, 0.98, cover, 0, oy, stations[NF + 1])
+  } else frameAt(FIN, FIN_DIR, ringW, ringW * 0.62, aspect, 38, 0.48, 0.52, 0.25, 0.13, stations[NF + 1])
   return { sheet, aspect, stations }
 }
 
@@ -286,10 +319,11 @@ function buildCard(stage: HTMLElement, item: WorkItem, i: number, facets: number
   a.href = item.url
   a.target = '_blank'
   a.rel = 'noopener'
-  a.setAttribute('aria-label', `Visit ${item.name} (opens in a new tab)`)
-  a.append('Visit site ')
+  const preview = isPreview(item.url)
+  a.setAttribute('aria-label', `${preview ? 'Preview' : 'Visit'} ${item.name} (opens in a new tab)`)
+  a.append(preview ? 'Preview site ' : 'Visit site ')
   el('span', 'wk-arrow', '↗', a).setAttribute('aria-hidden', 'true')
-  const tele = el('span', 'wk-tele', `SRC // ${host(item.url)} · FACETS ${facets}`, row)
+  const tele = el('span', 'wk-tele', `${srcOf(item)}${preview ? ' · PREVIEW' : ''} · FACETS ${facets}`, row)
   tele.setAttribute('aria-hidden', 'true')
   return { root, shade, parts: [meta, h, ind, blurb, tags, row], code, name, tele }
 }
@@ -307,6 +341,7 @@ interface Feat {
   probes: Probe[]
   probeText: ((time: number) => [string, string])[]
   beat: Beat
+  shot: Shot
 }
 
 interface Mini {
@@ -319,6 +354,47 @@ interface Mini {
   dy: number
   appear: number
   beat: Beat
+  shot: Shot
+  /** static top-to-bottom order of the label on its side of the ring */
+  order: number
+  // per-frame label layout scratch
+  x: number
+  y: number
+  vis: number
+  ly: number
+  lh: number
+  /** label column crosses the finale card (with hysteresis, so no jitter) */
+  finHit: boolean
+  /** label is pulled back over its own crystal by a viewport edge (hysteresis too) */
+  hang: boolean
+}
+
+/** One screenshot on its way to a crystal. */
+interface Shot {
+  id: string
+  /** shrink to a 512x320 canvas (the nine small ring crystals) */
+  thumb: boolean
+  u: CrystalUniforms
+  state: 'idle' | 'loading' | 'ready' | 'failed'
+  /** performance.now() when the texture was bound (drives the fade-in) */
+  readyAt: number
+}
+
+const SHOT_FADE_MS = 450
+const SHOT_CONCURRENCY = 2
+
+/** Load and decode an image off the main thread where the browser can. */
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.decoding = 'async'
+    img.onload = () => {
+      if (typeof img.decode === 'function') img.decode().then(() => resolve(img), () => resolve(img))
+      else resolve(img)
+    }
+    img.onerror = () => reject(new Error(`failed to load ${url}`))
+    img.src = url
+  })
 }
 
 class WorkChapter implements Chapter {
@@ -327,6 +403,8 @@ class WorkChapter implements Chapter {
 
   private feats: Feat[] = []
   private minis: Mini[] = []
+  /** the nine split by label side, each sorted top to bottom (static) */
+  private sides: Mini[][] = []
   private field!: Field
   private dust!: Dust
   private flare!: Flare
@@ -342,15 +420,33 @@ class WorkChapter implements Chapter {
   private euler = new THREE.Euler()
   private quat = new THREE.Quaternion()
   private v = new THREE.Vector3()
+  private _p = new THREE.Vector3()
+  private _r = new THREE.Vector3()
   private stage!: HTMLElement
   private scrim!: HTMLDivElement
-  private intro!: HTMLDivElement
-  private introText!: HTMLSpanElement
+  private head!: {
+    root: HTMLDivElement
+    shade: HTMLDivElement
+    parts: HTMLElement[]
+    title: HTMLElement
+    sub: HTMLElement
+    titleText: string
+    subText: string
+  }
+  private introWant = true
   private fin!: HTMLDivElement
   private finParts: HTMLElement[] = []
   private reduced = false
   private sheet = false
   private finRect: { left: number; top: number; right: number; bottom: number } | null = null
+  // streamed screenshots
+  private renderer!: THREE.WebGLRenderer
+  private aniso = 1
+  private shots: Shot[] = []
+  private loading = 0
+  private streaming = false
+  private uploads: (() => void)[] = []
+  private pumping = false
   // time-based HUD beats
   private introBeat = new Beat()
   private finBeat = new Beat()
@@ -372,28 +468,38 @@ class WorkChapter implements Chapter {
     const hq = !ctx.mobile
     const stage = ctx.stage
 
-    // ---- textures (a failed image must never take the chapter down)
+    // ---- textures: never block the reveal on screenshots. Every crystal
+    // starts on a 1x1 dark-glass texture; the real images stream in (the first
+    // one right away, the rest after the reveal) and fade in as they land.
+    // A failed image just leaves its crystal dark: it can never take the
+    // chapter down.
+    this.renderer = ctx.renderer
+    this.aniso = Math.min(8, ctx.renderer.capabilities.getMaxAnisotropy())
     const blank = new THREE.DataTexture(new Uint8Array([6, 10, 12, 255]), 1, 1)
     blank.needsUpdate = true
-    const load = (id: string) =>
-      ctx.assets.texture(workImage(id)).catch(err => {
-        console.warn(`[work] missing screenshot for ${id}`, err)
-        return blank as THREE.Texture
-      })
-    const [featTex, restTex] = await Promise.all([
-      Promise.all(FEATURED.map(w => load(w.id))),
-      Promise.all(REST.map(w => load(w.id).then(t => downscale(t, 512, 320)))),
-    ])
-    for (const t of [...featTex, ...restTex]) ctx.renderer.initTexture(t)
+    ctx.renderer.initTexture(blank)
 
     // ---- DOM scaffolding
-    el('h2', 'sr-only', 'Artifacts: selected work', stage)
     this.scrim = el('div', 'wk-scrim', undefined, stage)
     this.scrim.setAttribute('aria-hidden', 'true')
-    const introWrap = el('div', 'wk-intro', undefined, stage)
-    introWrap.setAttribute('aria-hidden', 'true')
-    this.intro = el('div', 'wk-intro-in', undefined, introWrap)
-    this.introText = el('span', 'wk-intro-text', '', this.intro)
+
+    // section headline: holds the card slot until the first artifact takes over
+    const head = el('div', 'wk-head', undefined, stage)
+    head.setAttribute('aria-hidden', 'true')
+    const headShade = el('div', 'wk-shade', undefined, head)
+    const headEyebrow = el('p', 'hud-eyebrow wk-head-eyebrow', SECTIONS.work.eyebrow, head)
+    const headTitle = el('h2', 'hud-h2 wk-head-title', '', head)
+    const headSub = el('p', 'wk-head-sub', '', head)
+    this.head = {
+      root: head,
+      shade: headShade,
+      parts: [headEyebrow, headTitle, headSub],
+      title: headTitle,
+      sub: headSub,
+      // two balanced lines: "BUILT TO / BE HEARD."
+      titleText: SECTIONS.work.title.replace(/\s+(\S+\s+\S+)$/, '\n$1'),
+      subText: `ARTIFACTS  //  ${pad2(WORK.length)} SITES  ·  ${pad2(NF)} UP CLOSE`,
+    }
 
     // transit readout: anchors every scroll position between two artifacts
     const trRoot = el('div', 'wk-transit', undefined, stage)
@@ -414,7 +520,7 @@ class WorkChapter implements Chapter {
       const hull = buildHull(crystalPoints(101 + i * 37, PANEL.x, PANEL.y, DEPTH))
       const box = hull.geometry.boundingBox!
       this.spans[i] = { w: box.max.x - box.min.x, h: box.max.y - box.min.y }
-      const crystal = createCrystal(hull, featTex[i], PANEL, 3 + i * 5, hq)
+      const crystal = createCrystal(hull, blank, PANEL, 3 + i * 5, hq)
       this.group.add(crystal.group)
       const girdle = hull.points.filter(p => Math.abs(p.z) < DEPTH * 0.7)
       const top = hull.points.reduce((m, p) => (p.y > m.y ? p : m))
@@ -427,7 +533,7 @@ class WorkChapter implements Chapter {
       for (const p of probes) p.root.setAttribute('aria-hidden', 'true')
       const seedN = i * 13.7
       const probeText: Feat['probeText'] = [
-        () => [`SRC // ${host(item.url)}`, '● LIVE · 200 OK'],
+        () => [srcOf(item), isPreview(item.url) ? '○ PREVIEW BUILD' : '● LIVE · 200 OK'],
         () => [`FACETS ${hull.facets}`, 'IOR 1.46 · DISP 0.09'],
         t => {
           const n = Math.floor(t * 1.5)
@@ -451,6 +557,7 @@ class WorkChapter implements Chapter {
         probes,
         probeText,
         beat: new Beat(),
+        shot: this.addShot(item.id, false, crystal.uniforms),
       })
     })
 
@@ -496,7 +603,7 @@ class WorkChapter implements Chapter {
 
     REST.forEach((item, k) => {
       const hull = buildHull(crystalPoints(401 + k * 29, PANEL.x, PANEL.y, DEPTH))
-      const crystal = createCrystal(hull, restTex[k], PANEL, 50 + k * 3, false)
+      const crystal = createCrystal(hull, blank, PANEL, 50 + k * 3, false)
       crystal.back.visible = hq
       crystal.uniforms.uEdge.value = 1
       this.ring.add(crystal.group)
@@ -535,12 +642,23 @@ class WorkChapter implements Chapter {
         dy: Math.sin(theta) >= 0 ? 26 : -26,
         appear: 0,
         beat: new Beat(),
+        shot: this.addShot(item.id, true, crystal.uniforms),
+        order: Math.sin(theta),
+        x: 0,
+        y: 0,
+        vis: 0,
+        ly: 0,
+        lh: 0,
+        finHit: false,
+        hang: false,
       })
     })
 
+    this.sides = [-1, 1].map(d => this.minis.filter(m => m.dir === d).sort((a, b) => a.order - b.order))
+
     // ---- debris field + dust (keep the camera path and the hero shots clear)
     this.lay = computeLayout(1440, 900, this.spans)
-    const lays = [this.lay, computeLayout(390, 844, this.spans)]
+    const lays = [this.lay, computeLayout(390, 844, this.spans), computeLayout(375, 667, this.spans, 300)]
     const samples: THREE.Vector3[] = []
     const sightlines: [THREE.Vector3, THREE.Vector3][] = []
     const finLines: [THREE.Vector3, THREE.Vector3][] = []
@@ -581,6 +699,95 @@ class WorkChapter implements Chapter {
     this.flare = createFlare()
     this.flare.mesh.position.copy(FIN)
     this.group.add(this.flare.mesh)
+
+    // ---- screenshots: the first artifact now (work follows the hero), the
+    // rest once the scene is revealed (or the visitor is already here)
+    this.fetchShot(this.shots[0])
+    const go = () => this.startStreaming()
+    if (document.documentElement.dataset.ready === '1') go()
+    else {
+      window.addEventListener('hark:reveal', go, { once: true })
+      window.setTimeout(go, 15000)
+    }
+    // webfonts change the finale card's box: re-measure once they settle
+    document.fonts?.ready.then(() => {
+      this.layKey = ''
+    })
+  }
+
+  // ---------------------------------------------------------------- streaming
+
+  private addShot(id: string, thumb: boolean, u: CrystalUniforms): Shot {
+    const shot: Shot = { id, thumb, u, state: 'idle', readyAt: 0 }
+    this.shots.push(shot)
+    return shot
+  }
+
+  private startStreaming() {
+    if (this.streaming) return
+    this.streaming = true
+    this.pumpLoads()
+  }
+
+  /** Featured first (in story order), then the nine; two requests at a time. */
+  private pumpLoads() {
+    while (this.loading < SHOT_CONCURRENCY) {
+      const next = this.shots.find(s => s.state === 'idle')
+      if (!next) return
+      this.fetchShot(next)
+    }
+  }
+
+  private fetchShot(shot: Shot) {
+    if (shot.state !== 'idle') return
+    shot.state = 'loading'
+    this.loading++
+    loadImage(workImage(shot.id))
+      .then(img => {
+        const tex = shot.thumb ? thumbTexture(img, 512, 320) : new THREE.Texture(img)
+        tex.colorSpace = THREE.SRGBColorSpace
+        tex.anisotropy = this.aniso
+        tex.needsUpdate = true
+        this.queueUpload(() => {
+          // upload now (one per frame), then bind: no shader change, just a new sampler
+          this.renderer.initTexture(tex)
+          shot.u.uMap.value = tex
+          shot.readyAt = performance.now()
+          shot.state = 'ready'
+        })
+      })
+      .catch(err => {
+        console.warn(`[work] missing screenshot for ${shot.id}`, err)
+        shot.state = 'failed'
+      })
+      .finally(() => {
+        this.loading--
+        if (this.streaming) this.pumpLoads()
+      })
+  }
+
+  /** GPU uploads are spread one per animation frame so scrolling never hitches. */
+  private queueUpload(job: () => void) {
+    this.uploads.push(job)
+    if (this.pumping) return
+    this.pumping = true
+    const pump = () => {
+      const next = this.uploads.shift()
+      try {
+        next?.()
+      } catch (err) {
+        console.warn('[work] texture upload failed', err)
+      }
+      if (this.uploads.length) requestAnimationFrame(pump)
+      else this.pumping = false
+    }
+    requestAnimationFrame(pump)
+  }
+
+  /** 0..1 fade-in of a crystal's screenshot. */
+  private shotLevel(shot: Shot, now: number) {
+    if (shot.state !== 'ready') return 0
+    return ease.inOutQuad(clamp((now - shot.readyAt) / SHOT_FADE_MS))
   }
 
   private ringAngle(k: number, l: number) {
@@ -591,31 +798,54 @@ class WorkChapter implements Chapter {
     const key = `${f.width}x${f.height}`
     if (key === this.layKey) return
     this.layKey = key
-    this.lay = computeLayout(f.width, f.height, this.spans)
+    // the finale card's wrapper is never transformed and hidden stages keep
+    // their layout, so its box is the settled layout even before it shows
+    this.measureFin()
+    this.lay = computeLayout(f.width, f.height, this.spans, this.finTop)
     this.sheet = this.lay.sheet
-    this.finRect = null
     for (const c of this.feats) for (const p of c.probes) p.invalidate()
     for (const m of this.minis) {
       m.probe.invalidate()
       m.num.invalidate()
+      m.finHit = false
+      m.hang = false
+    }
+  }
+
+  private finTop = 0
+
+  private measureFin() {
+    const b = this.fin.getBoundingClientRect()
+    if (b.width && b.height) {
+      this.finTop = b.top
+      this.finRect = { left: b.left - 12, top: b.top - 20, right: b.right + 16, bottom: b.bottom + 8 }
+    } else {
+      this.finTop = 0
+      this.finRect = null
     }
   }
 
   onEnter() {
+    // a deep link or a fast scroll got here before the reveal: stream now
+    this.startStreaming()
     // replay every HUD beat from scratch when the chapter comes back
+    this.introWant = true
     this.introBeat.reset()
     this.finBeat.reset()
     this.trBeat.reset()
     this.active = -1
     this.trSeg = -1
     for (const c of this.feats) c.beat.reset()
-    for (const m of this.minis) m.beat.reset()
-    this.finRect = null
+    for (const m of this.minis) {
+      m.beat.reset()
+      m.finHit = false
+      m.hang = false
+    }
   }
 
   /** Which featured project owns the HUD at this scroll position (-1 = none). */
   private pickActive(l: number): number {
-    if (l >= FIN_ON) return -1
+    if (l >= FIN_ON || this.introWant) return -1
     for (const c of this.feats) {
       const ap = Math.abs((l - centerOf(c.i)) / FW)
       if (ap < SHOW || (c.i === this.active && ap < SHOW + HYST)) return c.i
@@ -639,14 +869,23 @@ class WorkChapter implements Chapter {
 
     // ---- HUD beats (scroll picks the target, the clock animates it)
     const rm = this.reduced
+    // the headline and the first artifact share the card slot: hand over with
+    // a little hysteresis, and never show both at once (one clears, then the
+    // other decodes in)
+    this.introWant = this.introWant ? l < INTRO_END + 0.003 : l < INTRO_END - 0.003
     this.active = this.pickActive(l)
-    const introOn = l < INTRO_END
+    const first = this.feats[0].beat
+    const introOn = this.introWant && first.v < 0.02
     const finOn = l >= FIN_ON && l < OUT0
-    const trOn = !introOn && this.active < 0 && l < FIN_ON
-    this.introBeat.step(introOn, time, dt, rm ? 0.2 : 0.35, 0.25)
+    const trOn = !this.introWant && this.active < 0 && l < FIN_ON
+    this.introBeat.step(introOn, time, dt, rm ? 0.2 : 0.4, 0.15)
     this.finBeat.step(finOn, time, dt, rm ? 0.25 : 0.75, 0.22)
     this.trBeat.step(trOn, time, dt, rm ? 0.2 : 0.3, 0.2)
-    for (const c of this.feats) c.beat.step(c.i === this.active, time, dt, rm ? 0.25 : 0.6, 0.28)
+    for (const c of this.feats) {
+      const want = c.i === this.active && (c.i > 0 || this.introBeat.v < 0.02)
+      c.beat.step(want, time, dt, rm ? 0.25 : 0.6, 0.28)
+    }
+    const now = performance.now()
 
     // ---- sky + post
     const sky = ctx.sky.params
@@ -697,6 +936,7 @@ class WorkChapter implements Chapter {
       )
       g.quaternion.copy(this.dummy.quaternion).multiply(this.quat.setFromEuler(this.euler))
       const u = c.crystal.uniforms
+      u.uReady.value = this.shotLevel(c.shot, now)
       u.uActive.value = active
       u.uTime.value = time
       u.uGlow.value = 0.45 + 0.55 * focus
@@ -740,6 +980,7 @@ class WorkChapter implements Chapter {
         g.rotateY(Math.sin(time * 0.4 + m.k * 1.3) * 0.22 * calm)
         g.rotateX(Math.sin(time * 0.33 + m.k) * 0.12 * calm)
         const u = m.crystal.uniforms
+        u.uReady.value = this.shotLevel(m.shot, now)
         u.uActive.value = smoothstep(0.3, 1, appear)
         u.uTime.value = time
         u.uGlow.value = 0.85
@@ -755,14 +996,8 @@ class WorkChapter implements Chapter {
     this.flare.uniforms.uSize.value = lerp(0.35, 2.2, outT)
     this.flare.uniforms.uIntensity.value = smoothstep(0, 0.35, outT) * (0.7 + 1.8 * outT)
 
-    // ---- DOM: intro stamp
-    const iv = ease.outCubic(this.introBeat.v)
-    reveal(this.intro, iv, 0)
-    if (iv > 0) {
-      const txt = `ARTIFACTS  //  ${pad2(WORK.length)} LIVE SITES`
-      const s = this.introBeat.on && !rm ? scrambleAt(txt, this.introBeat.age(time) / 0.6) : txt
-      if (this.introText.textContent !== s) this.introText.textContent = s
-    }
+    // ---- DOM: section headline
+    this.updateHead(time)
 
     // ---- DOM: transit readout
     this.updateTransit(l, time)
@@ -771,11 +1006,27 @@ class WorkChapter implements Chapter {
     const fv = this.finBeat.v
     for (let k = 0; k < this.finParts.length; k++) reveal(this.finParts[k], ease.outCubic(smoothstep(k * 0.1, k * 0.1 + 0.6, fv)), 16)
     this.fin.style.visibility = fv > 0.002 ? 'visible' : 'hidden'
-    let cardMax = fv
+    let cardMax = Math.max(fv, this.introBeat.v)
     for (const c of this.feats) cardMax = Math.max(cardMax, c.beat.v)
     reveal(this.scrim, this.sheet ? ease.inOutQuad(cardMax) : 0, 0)
 
     this.group.updateMatrixWorld(true)
+  }
+
+  private updateHead(time: number) {
+    const hd = this.head
+    const b = this.introBeat
+    const v = b.v
+    hd.root.style.visibility = v > 0.002 ? 'visible' : 'hidden'
+    reveal(hd.shade, ease.inOutQuad(v), 0)
+    for (let k = 0; k < hd.parts.length; k++) reveal(hd.parts[k], ease.outCubic(smoothstep(k * 0.08, k * 0.08 + 0.55, v)), 18)
+    if (v <= 0.002) return
+    // decode on the clock; exact text once resolved (and while fading out)
+    const a = b.on && !this.reduced ? b.age(time) : 99
+    const ts = scrambleAt(hd.titleText, (a - 0.05) / 0.45)
+    if (hd.title.textContent !== ts) hd.title.textContent = ts
+    const ss = scrambleAt(hd.subText, (a - 0.12) / 0.42)
+    if (hd.sub.textContent !== ss) hd.sub.textContent = ss
   }
 
   private updateTransit(l: number, time: number) {
@@ -904,42 +1155,135 @@ class WorkChapter implements Chapter {
         else pr.place(x, y, pv, s, 70, 42, w, h, padX)
       }
     }
-    // the nine (labels steer clear of the finale card). The wrapper itself is
-    // never transformed, so its box is the settled layout even mid-reveal.
-    if (!this.finRect && this.finBeat.on && !this.sheet) {
-      const b = this.fin.getBoundingClientRect()
-      if (b.width && b.height) this.finRect = { left: b.left - 12, top: b.top - 20, right: b.right + 16, bottom: b.bottom + 8 }
-    }
+    this.placeMinis(f, padX)
+  }
+
+  /**
+   * The nine. Desktop: named labels in two columns (left/right of the ring),
+   * de-overlapped top to bottom and lifted clear of the finale card, the
+   * standard leader-label layout. Sheet: numbers only (the names are listed
+   * in the card), hidden where they would touch the card.
+   */
+  private placeMinis(f: Frame, padX: number) {
+    const w = f.width
+    const h = f.height
+    if (!this.finRect && this.finBeat.on) this.measureFin()
+    const fr = this.finRect
+    let any = false
     for (const m of this.minis) {
-      const base = m.beat.v
-      const onDesk = !this.sheet && base > 0.002 && m.crystal.group.visible
-      const onSheet = this.sheet && base > 0.002 && m.crystal.group.visible
-      if (!onDesk) m.probe.place(0, 0, 0, 1, 0, 0, w, h)
-      if (!onSheet) m.num.place(0, 0, 0, 1, 0, 0, w, h)
-      if (!onDesk && !onSheet) continue
+      const live = m.beat.v > 0.002 && this.ring.visible
+      if (this.sheet || !live) m.probe.place(0, 0, 0, 1, 0, 0, w, h)
+      if (!this.sheet || !live) m.num.place(0, 0, 0, 1, 0, 0, w, h)
+      any ||= live
+    }
+    if (!any) return
+    // project all nine (positions exist even before a crystal has appeared),
+    // so the layout never shuffles as the labels arrive one by one
+    for (const m of this.minis) {
       m.crystal.group.getWorldPosition(this.v)
       const [x, y, front] = this.project(this.v, f)
-      const vis = front ? ease.outCubic(base) : 0
-      if (onDesk) m.probe.place(x, y, vis, m.dir, 58, m.dy, w, h, padX, this.finRect)
-      if (onSheet) m.num.place(x, y, vis, m.dir, 20, m.dy * 0.6, w, h, 10)
+      m.x = x
+      m.y = y
+      m.vis = front && m.crystal.group.visible ? ease.outCubic(m.beat.v) : 0
+    }
+
+    if (this.sheet) {
+      // leader length follows the crystals' on-screen size (tablets frame the
+      // ring much larger than phones), so the numbers always sit outside them
+      const [cx] = this.project(FIN, f)
+      const [rx] = this.project(this._p.copy(FIN).addScaledVector(this._r.setFromMatrixColumn(this.projCam.matrixWorld, 0), RING_R), f)
+      const k = Math.abs(rx - cx) / RING_R // px per world unit at the ring
+      const dx = Math.max(20, 0.62 * k)
+      const ady = Math.max(15.6, 0.45 * k)
+      for (const m of this.minis) {
+        if (m.beat.v <= 0.002) continue
+        const dy = Math.sign(m.dy) * ady
+        const ly = m.y + dy
+        // fr.top + 20 is the card's own top edge
+        const clear = !fr || Math.max(ly + 6, m.y + 6) < fr.top + 20
+        m.num.place(m.x, m.y, clear ? m.vis : 0, m.dir, dx, dy, w, h, 10)
+      }
+      return
+    }
+
+    const DX = 58
+    const GAP = 6
+    const top = Math.max(padX + 10, 78) // under the header chrome
+    const bottom = h - Math.max(padX, 78) // above the footer chrome
+    for (const g of this.sides) {
+      if (!g.length) continue
+      const side = g[0].dir
+      const floor: number[] = []
+      for (const m of g) {
+        const sz = m.probe.size()
+        m.lh = sz.h
+        const lx = clamp(side > 0 ? m.x + DX + 8 : m.x - DX - 8 - sz.w, padX, w - padX - sz.w)
+        // near a viewport edge the label is pulled back over its own crystal:
+        // then hang it fully above / below the crystal instead of across it
+        m.hang = overlaps(lx, lx + sz.w, m.x, m.x, m.hang ? 46 : 34)
+        const dy = m.hang ? (m.dy < 0 ? Math.min(m.dy, -(sz.h + 16)) : Math.max(m.dy, 34)) : m.dy
+        m.ly = m.y + dy
+        let lo = bottom - sz.h + 9
+        if (fr) {
+          m.finHit = overlaps(lx, lx + sz.w, fr.left, fr.right, m.finHit ? 40 : 24)
+          if (m.finHit) lo = Math.min(lo, fr.top + 9 - sz.h)
+        }
+        floor.push(lo)
+      }
+      // 1-D de-overlap, order preserved: labels that would collide merge into
+      // a stack centred on where its members want to be (least total shift),
+      // held above the floors (card, footer) and under the header
+      const want = g.map(m => m.ly)
+      const stacks: { i0: number; i1: number; top: number }[] = []
+      const settle = (c: { i0: number; i1: number; top: number }) => {
+        let off = 0
+        let sum = 0
+        let hi = Infinity
+        for (let i = c.i0; i <= c.i1; i++) {
+          sum += want[i] - off
+          hi = Math.min(hi, floor[i] - off)
+          off += g[i].lh + GAP
+        }
+        c.top = Math.max(Math.min(sum / (c.i1 - c.i0 + 1), hi), top + 9)
+        return off
+      }
+      for (let i = 0; i < g.length; i++) {
+        stacks.push({ i0: i, i1: i, top: 0 })
+        settle(stacks[stacks.length - 1])
+        while (stacks.length > 1) {
+          const b = stacks[stacks.length - 1]
+          const a = stacks[stacks.length - 2]
+          if (a.top + settle(a) <= b.top) break
+          a.i1 = b.i1
+          stacks.pop()
+          settle(a)
+        }
+      }
+      for (const c of stacks) {
+        let ly = c.top
+        for (let i = c.i0; i <= c.i1; i++) {
+          g[i].ly = ly
+          ly += g[i].lh + GAP
+        }
+      }
+      for (const m of g) {
+        if (m.beat.v <= 0.002) continue
+        m.probe.place(m.x, m.y, m.vis, side, DX, m.ly - m.y, w, h, padX)
+      }
     }
   }
 }
 
-/** Shrink a loaded image into a small canvas texture (for the nine minis). */
-function downscale(tex: THREE.Texture, w: number, h: number): THREE.Texture {
-  const img = tex.image as CanvasImageSource | undefined
-  if (!img || !(img instanceof HTMLImageElement || img instanceof ImageBitmap || img instanceof HTMLCanvasElement)) return tex
+/** Shrink a decoded screenshot into a small canvas texture (for the nine minis). */
+function thumbTexture(img: HTMLImageElement, w: number, h: number): THREE.Texture {
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
   const g = canvas.getContext('2d')
-  if (!g) return tex
+  if (!g) return new THREE.Texture(img)
+  g.imageSmoothingQuality = 'high'
   g.drawImage(img, 0, 0, w, h)
-  const out = new THREE.CanvasTexture(canvas)
-  out.colorSpace = THREE.SRGBColorSpace
-  out.anisotropy = tex.anisotropy
-  return out
+  return new THREE.CanvasTexture(canvas)
 }
 
 export default function create(): Chapter {

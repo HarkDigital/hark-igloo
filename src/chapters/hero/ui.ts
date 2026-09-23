@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { BRAND, CONTACT } from '../../content'
+import { BRAND, CONTACT, MICROCOPY } from '../../content'
 import { Callout, el, reveal } from '../../core/dom'
 import { Scramble, scrambleAt } from '../../core/scramble'
 import { clamp, ease } from '../../core/math'
@@ -64,12 +64,21 @@ interface HeroCallout {
   baseY: number
   flipped: boolean
   world: THREE.Vector3
+  /** label box, measured only when it resizes (no per-frame layout reads) */
+  size: { w: number; h: number }
 }
 
 /**
- * All of the hero's DOM: manifesto, scroll hint, assembly/resolve status
- * readout, brick callouts and the payoff headline + CTAs.
+ * All of the hero's DOM: the signal statement, scroll hint, tuning/clarity
+ * status readout, brick callouts and the payoff headline + CTAs. Microcopy is
+ * in Hark's own "hark means listen" voice (MICROCOPY in content.ts).
  */
+
+/** Status readout phases: bricks locking on, then the chrome resolving. */
+const PHASES = {
+  assembly: { seq: '02', label: 'Tuning in' },
+  resolve: { seq: '03', label: 'Loud and clear' },
+}
 export class HeroUI {
   root: HTMLDivElement
   private manifesto: HTMLElement
@@ -97,10 +106,10 @@ export class HeroUI {
   constructor(stage: HTMLElement) {
     this.root = el('div', 'hero-root', undefined, stage)
 
-    // --- manifesto (top right) ---
+    // --- the signal statement (top right) ---
     const mWrap = el('div', 'hero-in hero-manifesto', undefined, this.root)
     this.manifesto = el('div', 'hero-manifesto__inner', undefined, mWrap)
-    el('p', 'hud-eyebrow', 'Manifesto', this.manifesto)
+    el('p', 'hud-eyebrow', MICROCOPY.signalEyebrow, this.manifesto)
     const mText = el('p', 'hero-manifesto__text', undefined, this.manifesto)
     el('span', 'sr-only', BRAND.manifesto, mText)
     // sizer keeps the block's height fixed while the visible copy decodes
@@ -116,14 +125,14 @@ export class HeroUI {
     const tick = el('span', 'hero-scroll__tick', undefined, this.scroll)
     tick.setAttribute('aria-hidden', 'true')
     el('i', '', undefined, tick)
-    el('span', 'hud-label hero-scroll__label', 'Scroll down to discover', this.scroll)
+    el('span', 'hud-label hero-scroll__label', MICROCOPY.scrollHint, this.scroll)
 
     // --- status readout (bottom left) ---
     this.status = el('div', 'hero-status', undefined, this.root)
     this.status.setAttribute('aria-hidden', 'true')
     const row = el('div', 'hero-status__row', undefined, this.status)
-    this.statusSeq = el('span', 'hero-status__seq', 'SEQ 02', row)
-    this.statusPhase = el('span', 'hero-status__phase', 'ASSEMBLY', row)
+    this.statusSeq = el('span', 'hero-status__seq', PHASES.assembly.seq, row)
+    this.statusPhase = el('span', 'hero-status__phase', PHASES.assembly.label, row)
     const bar = el('div', 'hero-status__bar', undefined, this.status)
     this.statusBar = el('i', '', undefined, bar)
     this.statusCount = el('div', 'hero-status__count', '', this.status)
@@ -179,25 +188,37 @@ export class HeroUI {
       const callout = new Callout(this.root, { side: w.side, offset: { x: baseX, y: baseY } })
       callout.root.classList.add('hero-co')
       callout.root.setAttribute('aria-hidden', 'true')
+      reveal(callout.root, 0, 0)
       callout.label.textContent = ''
-      const numEl = el('span', 'hero-co__num', '', callout.label)
-      const l1 = el('span', 'hero-co__l1', '', callout.label)
-      const l2 = el('span', 'hero-co__l2', '', callout.label)
+      // start hidden but holding full-width copy, so the first measurement is the real box
+      const num = pad(Math.round(brick.order * 99), 2)
+      const tel = `X${signed(brick.target.x)}  Y${signed(brick.target.y)}  Z${signed(brick.target.z)}`
+      const numEl = el('span', 'hero-co__num', num, callout.label)
+      const l1 = el('span', 'hero-co__l1', `BLOCK_${pad(brick.index, 4)} · IN TUNE`, callout.label)
+      const l2 = el('span', 'hero-co__l2', tel, callout.label)
       this.callouts.push({
         callout,
         brick,
-        num: pad(Math.round(brick.order * 99), 2),
+        num,
         gate: new Gate(0.28, 0.32),
         numD: new Decode(numEl),
         l1D: new Decode(l1),
         l2D: new Decode(l2),
-        tel: `X${signed(brick.target.x)}  Y${signed(brick.target.y)}  Z${signed(brick.target.z)}`,
+        tel,
         sideBase: w.side,
         baseX,
         baseY,
         flipped: false,
         world: new THREE.Vector3(),
+        size: { w: 0, h: 0 },
       })
+      const size = this.callouts[this.callouts.length - 1].size
+      if (typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(() => {
+          size.w = callout.label.offsetWidth
+          size.h = callout.label.offsetHeight
+        }).observe(callout.label)
+      }
     }
   }
 
@@ -224,13 +245,13 @@ export class HeroUI {
     reveal(this.status, ease.outCubic(sv), 8)
     if (sv > 0) {
       const resolving = local >= T.resolveA
-      const phase = resolving ? 'RESOLVE' : 'ASSEMBLY'
-      if (phase !== this.lastPhase) {
-        this.lastPhase = phase
-        this.statusSeq.textContent = resolving ? 'SEQ 03' : 'SEQ 02'
-        this.statusPhase.textContent = phase
+      const phase = resolving ? PHASES.resolve : PHASES.assembly
+      if (phase.label !== this.lastPhase) {
+        this.lastPhase = phase.label
+        this.statusSeq.textContent = phase.seq
+        this.statusPhase.textContent = phase.label
       }
-      const count = resolving ? `SURFACE  ${pad(surface * 100, 3)}%` : `${pad(landed, 4)} / ${pad(total, 4)}  BLOCKS LOCKED`
+      const count = resolving ? `Clarity  ${pad(surface * 100, 3)}%` : `${pad(landed, 4)} / ${pad(total, 4)}  blocks in tune`
       if (this.statusCount.textContent !== count) this.statusCount.textContent = count
       const p = resolving ? surface : landed / Math.max(1, total)
       this.statusBar.style.transform = `scaleX(${clamp(p).toFixed(4)})`
@@ -273,8 +294,12 @@ export class HeroUI {
         tmp.copy(c.world).project(camera)
         const sx = (tmp.x * 0.5 + 0.5) * w
         const sy = (-tmp.y * 0.5 + 0.5) * h
-        const lw = c.callout.label.offsetWidth || 200
-        const lh = c.callout.label.offsetHeight || 32
+        if (!c.size.w) {
+          c.size.w = c.callout.label.offsetWidth
+          c.size.h = c.callout.label.offsetHeight
+        }
+        const lw = c.size.w || 200
+        const lh = c.size.h || 32
         const need = c.baseX + 8 + lw
         const room = (side: 'left' | 'right') => (side === 'right' ? w - gut - sx : sx - gut)
         const other = c.sideBase === 'right' ? 'left' : 'right'
@@ -301,7 +326,7 @@ export class HeroUI {
       const t = this.reduced ? 10 : c.gate.t
       const lock = clamp((local - (t0 - 0.01)) / 0.014)
       // same width either way so the label never jumps
-      const l1 = `BLOCK_${pad(c.brick.index, 4)} · ${lock >= 1 ? 'LOCKED' : `${pad(lock * 100, 3)}%  `}`
+      const l1 = `BLOCK_${pad(c.brick.index, 4)} · ${lock >= 1 ? 'IN TUNE' : `${pad(lock * 100, 3)}%   `}`
       c.numD.show(c.num, t / 0.28, clock)
       c.l1D.show(l1, (t - 0.05) / 0.4, clock)
       c.l2D.show(c.tel, (t - 0.14) / 0.46, clock)

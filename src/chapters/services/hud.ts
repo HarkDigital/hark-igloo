@@ -2,22 +2,25 @@ import * as THREE from 'three'
 import { Callout, el, reveal } from '../../core/dom'
 import { scrambleAt } from '../../core/scramble'
 import { clamp, ease } from '../../core/math'
-import { BRAND, SERVICES } from '../../content'
+import { SECTIONS, SERVICES } from '../../content'
 import { COUNT, WORLDS, focusCenter } from './system'
 
 /*
  * DOM overlay for the Orbit chapter: intro, service panel, index rail,
- * callout and world labels.
+ * callout and world labels. (The stage is a visual layer only; the readable
+ * copy lives in the chapter's accessible section, see core/srContent.ts.)
  *
- * Scroll (local) decides WHAT is on screen — which service is focused, whether
- * the panel / intro / callout should be up. HOW it arrives (fade, decode,
- * stagger) runs on short time-based tweens that always settle, so whatever
- * position the scroll rests at, every piece of copy ends fully opaque and
- * exactly readable within ~0.8s, and a decode only re-runs when the focused
- * service actually changes.
+ * Scroll (via the camera) decides WHAT is on screen: which world the camera is
+ * locked on, or which leg it is travelling, and whether the panel / intro /
+ * callout should be up. HOW it arrives (fade, decode, stagger) runs on short
+ * time-based tweens that always settle, so whatever position the scroll rests
+ * at, every piece of copy ends fully opaque and exactly readable within ~0.8s,
+ * and a decode only re-runs when what the panel names actually changes.
  */
 
 const pad = (n: number) => String(n).padStart(2, '0')
+/** vertical padding of .svc-stack (services.css): glow room inside its clip */
+const STACK_PAD = 8
 const setText = (node: HTMLElement, s: string) => {
   if (node.textContent !== s) node.textContent = s
 }
@@ -58,6 +61,18 @@ class Fade {
   }
 }
 
+/** The panel's in-flight readout: IN TRANSIT 05 → 06, leg progress, next stop. */
+interface Transit {
+  root: HTMLElement
+  id: HTMLElement
+  route: HTMLElement
+  track: HTMLElement
+  next: HTMLElement
+  fade: Fade
+  leg: number
+  txt: [string, string, string]
+}
+
 interface Item {
   root: HTMLElement
   id: HTMLElement
@@ -88,15 +103,21 @@ const overlaps = (r: Rect | null, x0: number, y0: number, x1: number, y1: number
 
 export interface HudState {
   local: number
-  /** continuous focus coordinate (k at the center of service k) */
-  F: number
   dt: number
   /** reduced motion: no decode, quicker fades */
   calm: boolean
   introOn: boolean
   panelOn: boolean
+  /** world the camera is locked on; -1 while it travels between worlds */
+  lock: number
+  /** the leg in flight: from world `leg` (-1 = the star) to world `leg + 1` */
+  leg: number
+  /** 0..1 camera progress along that leg */
+  legT: number
+  /** world nearest the camera (drives the index rail) */
+  near: number
   railOn: boolean
-  /** the camera is holding on the focused world (not mid-flight) */
+  /** the camera is locked on a world (not mid-flight) */
   calloutOn: boolean
   labelsOn: boolean
   /** 0..1 progress through the whole services run */
@@ -111,7 +132,6 @@ export class ServicesHud {
   private intro: HTMLElement
   private introEyebrow: HTMLElement
   private introTitle: HTMLElement
-  private introBody: HTMLElement
   private introMeta: HTMLElement
   private introFade = new Fade(0.35, 0.18)
   private panel: HTMLElement
@@ -119,7 +139,9 @@ export class ServicesHud {
   private stack: HTMLElement
   private meter: HTMLElement
   private items: Item[] = []
+  private transit: Transit
   private want = -1
+  private wantH = 0
   private stackH = 0
   private measureTick = 0
   private rail: HTMLElement
@@ -144,18 +166,6 @@ export class ServicesHud {
   compact = false
 
   constructor(stage: HTMLElement) {
-    // screen-reader copy of the whole chapter, in reading order
-    const sr = el('div', 'sr-only', undefined, stage)
-    el('h2', '', 'Services', sr)
-    el('p', '', BRAND.manifesto, sr)
-    const list = el('ol', '', undefined, sr)
-    for (const s of SERVICES) {
-      const li = el('li', '', undefined, list)
-      el('h3', '', s.title, li)
-      el('p', '', s.blurb, li)
-      el('p', '', s.tags.join(', '), li)
-    }
-
     // world labels (01…11) float with their worlds
     this.labelWrap = el('div', 'svc-labels', undefined, stage)
     this.labelWrap.setAttribute('aria-hidden', 'true')
@@ -173,8 +183,7 @@ export class ServicesHud {
     this.intro = el('div', 'svc-intro', undefined, stage)
     this.intro.setAttribute('aria-hidden', 'true')
     this.introEyebrow = el('p', 'hud-eyebrow svc-intro-eyebrow', '', this.intro)
-    this.introTitle = el('h2', 'hud-title svc-intro-title', 'Services', this.intro)
-    this.introBody = el('p', 'hud-body svc-intro-body', BRAND.manifesto, this.intro)
+    this.introTitle = el('h2', 'hud-title svc-intro-title', SECTIONS.services.title, this.intro)
     this.introMeta = el('p', 'hud-label svc-intro-meta', '', this.intro)
 
     // service panel: all 11 share one grid cell; the cell's height eases to the
@@ -212,6 +221,27 @@ export class ServicesHud {
         height: 0,
       })
     }
+    // in flight between two worlds the panel collapses to a transit readout
+    const tr = el('div', 'svc-item svc-transit', undefined, this.stack)
+    const trHead = el('div', 'svc-item-head', undefined, tr)
+    const trId = el('span', 'svc-id', '', trHead)
+    const trRoute = el('span', 'svc-of svc-tr-route', '', trHead)
+    const trTrack = el('div', 'svc-tr-track', undefined, tr)
+    el('i', 'svc-tr-fill', undefined, trTrack)
+    el('i', 'svc-tr-dot', undefined, trTrack)
+    const trNext = el('p', 'svc-tr-next', '', tr)
+    tr.style.opacity = '0'
+    tr.style.visibility = 'hidden'
+    this.transit = {
+      root: tr,
+      id: trId,
+      route: trRoute,
+      track: trTrack,
+      next: trNext,
+      fade: new Fade(0.22, 0.14),
+      leg: -2,
+      txt: ['', '', ''],
+    }
 
     // index rail
     this.rail = el('nav', 'svc-rail', undefined, stage)
@@ -245,27 +275,62 @@ export class ServicesHud {
     const it = T(iF.t)
     reveal(this.intro, iF.v > 0.001 ? 1 : 0, 0)
     const iv = iF.e
-    setText(this.introEyebrow, scrambleAt(`Services · 01—${pad(COUNT)}`, step(it, 0, 0.42)))
+    setText(this.introEyebrow, scrambleAt(`${SECTIONS.services.eyebrow} · 01—${pad(COUNT)}`, step(it, 0, 0.42)))
     const tIn = ease.outCubic(step(it, 0.05, 0.6))
     reveal(this.introTitle, iv * tIn, 26)
-    reveal(this.introBody, iv * ease.outCubic(step(it, 0.16, 0.5)), 14)
-    setText(this.introMeta, scrambleAt(`SYS_MAP // ${COUNT} BODIES // STAR HK-0`, step(it, 0.24, 0.42)))
+    setText(this.introMeta, scrambleAt(`SYS_MAP // ${COUNT} BODIES // STAR HK-0`, step(it, 0.2, 0.42)))
     reveal(this.introEyebrow, iv, 0)
-    reveal(this.introMeta, iv * step(it, 0.24, 0.2), 0)
+    reveal(this.introMeta, iv * step(it, 0.2, 0.2), 0)
 
     /* ---- panel frame (waits for the intro to clear: they share a corner) ---- */
     const pF = this.panelFade.update(s.panelOn, dt, this.introFade.v > 0.2)
     reveal(this.panel, pF.e, 22)
     this.meter.style.transform = `scaleX(${s.progress.toFixed(4)})`
 
-    /* ---- focused service: fade the old one out, then decode the new one in ---- */
-    const want = s.panelOn ? clamp(Math.round(s.F), 0, COUNT - 1) : -1
+    /* ---- what the panel names: the locked world, or the leg in flight.
+       The old content fades out, then the new one decodes in. ---- */
+    const TR = COUNT
+    const want = !s.panelOn ? -1 : s.lock >= 0 ? s.lock : TR
+    const trn = this.transit
+    if (want === TR && s.leg !== trn.leg) {
+      // new leg: retarget the readout (and re-decode it if it is already up)
+      trn.leg = s.leg
+      const to = SERVICES[Math.min(COUNT - 1, s.leg + 1)]
+      trn.txt = ['In transit', `${s.leg < 0 ? 'HK-0' : SERVICES[s.leg].num} → ${to.num}`, `Next  //  ${to.title}`]
+      trn.fade.t = 0
+    }
     if (want !== this.want) {
       this.want = want
-      if (want >= 0) this.setStackHeight(this.measure(want))
+      if (want >= 0) this.wantH = this.measure(want)
     }
-    let others = 0
+    // fonts can land late / widths change on resize: re-measure now and then
+    if (++this.measureTick % 30 === 0 && want >= 0) this.wantH = this.measure(want)
+    // the frame eases to a service's height at once, but only collapses to the
+    // transit readout once that has fully landed, so a quick pass between two
+    // worlds doesn't make the frame pump
+    if (want >= 0 && (want !== TR || trn.fade.v >= 1) && Math.abs(this.wantH - this.stackH) > 1) {
+      this.setStackHeight(this.wantH)
+    }
+    let others = want === TR ? 0 : trn.fade.v
     for (let k = 0; k < COUNT; k++) if (k !== want) others = Math.max(others, this.items[k].fade.v)
+    {
+      const f = trn.fade
+      const was = f.v
+      f.update(want === TR, dt, want === TR && (others > 0.04 || pF.v < 0.2))
+      if (f.v > 0 || was > 0) {
+        const o = f.v.toFixed(3)
+        if (trn.root.style.opacity !== o) {
+          trn.root.style.opacity = o
+          trn.root.style.visibility = f.v > 0.001 ? 'visible' : 'hidden'
+        }
+        const t = T(f.t)
+        setText(trn.id, scrambleAt(trn.txt[0], step(t, 0, 0.3)))
+        setText(trn.route, scrambleAt(trn.txt[1], step(t, 0.04, 0.34)))
+        setText(trn.next, scrambleAt(trn.txt[2], step(t, 0.1, 0.42)))
+        if (want === TR) trn.track.style.setProperty('--p', s.legT.toFixed(3))
+        trn.track.style.setProperty('--in', ease.outCubic(step(t, 0.04, 0.4)).toFixed(3))
+      }
+    }
     for (let k = 0; k < COUNT; k++) {
       const item = this.items[k]
       const f = item.fade
@@ -286,16 +351,11 @@ export class ServicesHud {
       reveal(item.blurb, ease.outCubic(step(t, 0.1, 0.42)), 12)
       item.tags.forEach((tag, i) => reveal(tag, ease.outCubic(step(t, 0.18 + i * 0.05, 0.32)), 8))
     }
-    // fonts can land late / widths change on resize: re-measure now and then
-    if (++this.measureTick % 30 === 0 && want >= 0) {
-      const h = this.measure(want)
-      if (Math.abs(h - this.stackH) > 1) this.setStackHeight(h)
-    }
 
-    /* ---- rail ---- */
+    /* ---- rail: follows the world nearest the camera ---- */
     const rF = this.railFade.update(s.railOn, dt)
     fade(this.rail, rF.e)
-    const act = s.railOn ? clamp(Math.round(s.F), 0, COUNT - 1) : -1
+    const act = s.railOn ? s.near : -1
     if (act !== this.active) {
       this.railItems.forEach((b, i) => {
         b.classList.toggle('is-active', i === act)
@@ -305,8 +365,8 @@ export class ServicesHud {
       this.active = act
     }
 
-    /* ---- callout: only while the camera holds on a world ---- */
-    const kWant = clamp(Math.round(s.F), 0, COUNT - 1)
+    /* ---- callout: only while the camera is locked on a world ---- */
+    const kWant = s.lock >= 0 ? s.lock : this.coWorld
     const cF = this.coFade
     if (s.calloutOn && kWant !== this.coWorld) {
       cF.update(false, dt)
@@ -338,6 +398,7 @@ export class ServicesHud {
   }
 
   private measure(k: number) {
+    if (k >= COUNT) return this.transit.root.offsetHeight
     const item = this.items[k]
     item.height = item.root.offsetHeight
     return item.height
@@ -347,7 +408,8 @@ export class ServicesHud {
     if (!h) return
     // first time: snap; afterwards the CSS transition eases it
     if (!this.stackH) this.stack.style.transition = 'none'
-    this.stack.style.height = `${h}px`
+    // + the stack's own padding (shadow room inside its clip, see services.css)
+    this.stack.style.height = `${h + STACK_PAD * 2}px`
     if (!this.stackH) {
       void this.stack.offsetHeight
       this.stack.style.transition = ''

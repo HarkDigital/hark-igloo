@@ -1,4 +1,4 @@
-/* ---------------- Gate (portal) ---------------- */
+/* ---------------- Gate (portal): how we work ---------------- */
 
 .stage-portal .gt-side {
   position: absolute;
@@ -16,111 +16,225 @@
 }
 
 .stage-portal .gt-panel {
-  width: clamp(220px, 19vw, 280px);
+  position: relative;
+  min-width: 0;
   will-change: opacity, transform;
 }
-
-.stage-portal .gt-panel .hud-eyebrow {
-  margin: 0 0 22px;
+/* a soft dark pool behind each column so segments flying past never fight
+   the copy; it lives on the panel, so it fades in and out with it */
+.stage-portal .gt-panel::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -56px -64px;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgba(2, 3, 4, 0.62), rgba(2, 3, 4, 0.36) 60%, rgba(2, 3, 4, 0));
+}
+.stage-portal .gt-proc {
+  width: clamp(236px, 22vw, 340px);
+}
+.stage-portal .gt-proof {
+  width: clamp(212px, 19vw, 290px);
 }
 
-.stage-portal .gt-readout {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+/* heading */
+.stage-portal .gt-eyebrow {
+  margin: 0 0 12px;
 }
-.stage-portal .gt-pct {
-  font-family: var(--font-mono);
-  font-weight: 200;
-  font-size: clamp(44px, 4.6vw, 72px);
-  line-height: 1;
-  letter-spacing: -0.04em;
+.stage-portal .gt-title {
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -0.015em;
+  line-height: 0.98;
+  font-size: clamp(22px, 2.1vw, 32px);
+  margin: 0 0 26px;
   color: var(--paper);
-  font-variant-numeric: tabular-nums;
-  text-shadow: 0 0 30px rgba(0, 255, 133, 0.25);
-}
-.stage-portal .gt-pct-unit {
-  font-size: 0.42em;
-  margin-left: 0.12em;
-  color: var(--signal);
-  vertical-align: 0.9em;
-  letter-spacing: 0;
+  text-shadow: 0 2px 20px rgba(2, 3, 4, 0.9);
+  text-wrap: balance;
 }
 
-.stage-portal .gt-bar {
-  display: grid;
-  grid-template-columns: repeat(36, 1fr);
-  gap: 2px;
-  height: 12px;
-  margin: 16px 0 10px;
+/* the four steps: a rail that fills keystone by keystone */
+.stage-portal .gt-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
-.stage-portal .gt-bar i {
+.stage-portal .gt-step {
+  position: relative;
+  padding: 0 0 18px 28px;
+}
+.stage-portal .gt-step:last-child {
+  padding-bottom: 0;
+}
+.stage-portal .gt-step::before,
+.stage-portal .gt-step-fill {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 16px;
+  bottom: -2px;
+  width: 1px;
+}
+.stage-portal .gt-step::before {
+  background: var(--line);
+}
+.stage-portal .gt-step:last-child::before,
+.stage-portal .gt-step:last-child .gt-step-fill {
+  bottom: 2px;
+}
+.stage-portal .gt-step-fill {
   display: block;
-  background: rgba(242, 246, 244, 0.12);
-  transition: background 0.2s ease, box-shadow 0.2s ease;
-}
-.stage-portal .gt-bar i.on {
   background: var(--signal);
   box-shadow: 0 0 8px rgba(0, 255, 133, 0.55);
+  transform-origin: 50% 0;
+  transform: scaleY(0);
 }
-
-.stage-portal .gt-row {
+/* a Hark diamond, like the keystones on the ring */
+.stage-portal .gt-step-dot {
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--line-strong);
+  background: var(--ink);
+  transform: rotate(45deg);
+  transition:
+    background 0.3s ease,
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+.stage-portal .gt-step.is-on .gt-step-dot {
+  background: var(--signal);
+  border-color: var(--signal);
+  box-shadow: 0 0 10px rgba(0, 255, 133, 0.7);
+}
+.stage-portal .gt-step-head {
   display: flex;
-  justify-content: space-between;
+  align-items: baseline;
   gap: 12px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  line-height: 1.4;
 }
-.stage-portal .gt-row-val {
+.stage-portal .gt-step-n {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--faint);
+  transition: color 0.3s ease;
+}
+.stage-portal .gt-step-t {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  color: var(--muted);
+  white-space: pre;
+  transition:
+    color 0.3s ease,
+    text-shadow 0.3s ease;
+}
+.stage-portal .gt-step.is-on .gt-step-t {
   color: var(--paper);
-  font-variant-numeric: tabular-nums;
+}
+.stage-portal .gt-step.is-active .gt-step-n,
+.stage-portal .gt-step.is-active .gt-step-t {
+  color: var(--signal);
+}
+.stage-portal .gt-step.is-active .gt-step-t {
+  text-shadow: 0 0 16px rgba(0, 255, 133, 0.55);
+}
+.stage-portal .gt-step-x {
+  margin: 6px 0 0;
+  font-family: var(--font-sans);
+  font-size: clamp(12.5px, 0.98vw, 14px);
+  line-height: 1.5;
+  color: rgba(242, 246, 244, 0.5);
+  text-shadow: 0 1px 10px rgba(2, 3, 4, 0.95);
+  /* not yet locked: a faint preview of what's coming */
+  opacity: 0.34;
+  transition:
+    opacity 0.45s ease,
+    color 0.45s ease;
+}
+.stage-portal .gt-step.is-on .gt-step-x {
+  opacity: 1;
+}
+.stage-portal .gt-step.is-active .gt-step-x {
+  color: rgba(242, 246, 244, 0.88);
+}
+/* phones only (see below) */
+.stage-portal .gt-read {
+  display: none;
 }
 
-/* telemetry list */
-.stage-portal .gt-tele {
+/* gate readouts: real proof points */
+.stage-portal .gt-proof-k {
+  margin: 0 0 12px;
+}
+.stage-portal .gt-stats {
   margin: 0;
-  display: grid;
-  gap: 0;
   border-top: 1px solid var(--line);
 }
-.stage-portal .gt-tele-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 16px;
-  padding: 11px 0;
+.stage-portal .gt-stat {
+  padding: 16px 0 18px;
   border-bottom: 1px solid var(--line);
+}
+.stage-portal .gt-stat-v {
+  min-height: 1em;
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-}
-.stage-portal .gt-tele-row dt {
-  color: var(--faint);
-  white-space: nowrap;
-}
-.stage-portal .gt-tele-row dd {
-  margin: 0;
+  font-weight: 200;
+  font-size: clamp(28px, 2.5vw, 40px);
+  line-height: 1;
+  letter-spacing: -0.03em;
   color: var(--paper);
   white-space: pre;
-  text-align: right;
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 26px rgba(0, 255, 133, 0.28);
 }
-.stage-portal .gt-tele-row.is-dest dd {
-  color: var(--signal);
-  text-shadow: 0 0 14px rgba(0, 255, 133, 0.5);
+.stage-portal .gt-stat-l {
+  margin: 8px 0 0;
+  font-family: var(--font-sans);
+  font-size: clamp(12px, 0.92vw, 13.5px);
+  line-height: 1.5;
+  color: rgba(242, 246, 244, 0.62);
+  text-shadow: 0 1px 10px rgba(2, 3, 4, 0.95);
 }
 
-/* centre cue, sits in the throat of the horizon */
+/* keystone tags: the step number beside each diamond on the ring */
+.stage-portal .gt-key {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--signal);
+  text-shadow:
+    0 0 10px rgba(0, 255, 133, 0.6),
+    0 1px 6px rgba(2, 3, 4, 1);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+/* centre cue, sits in the throat of the horizon: a zero-size anchor moved to
+   the ring's projected centre from JS; the cue centres itself on it */
 .stage-portal .gt-cue-wrap {
   position: absolute;
   left: 0;
-  right: 0;
-  top: calc(50% + 34px);
+  top: 0;
+  width: 0;
+  height: 0;
   display: flex;
   justify-content: center;
   pointer-events: none;
+  transform: translate3d(50vw, calc(50vh + 34px), 0);
 }
 .stage-portal .gt-cue {
   position: relative;
+  flex: none;
+  white-space: nowrap;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -166,25 +280,19 @@
   }
 }
 
-/* callout label content */
-.stage-portal .callout-label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.stage-portal .gt-co-k {
-  color: var(--signal);
-  font-size: 10px;
-}
-.stage-portal .gt-co-v {
-  color: var(--paper);
-  white-space: pre;
-}
-
-/* narrow landscape: keep the telemetry panel compact */
-@media (max-width: 1180px) {
-  .stage-portal .gt-tele-row.is-extra {
-    display: none;
+/* short laptops (1280×720, 1366×768): tighten the column rhythm */
+@media (min-width: 768px) and (min-aspect-ratio: 4/5) and (max-height: 820px) {
+  .stage-portal .gt-title {
+    margin-bottom: 20px;
+  }
+  .stage-portal .gt-step {
+    padding-bottom: 14px;
+  }
+  .stage-portal .gt-stat {
+    padding: 12px 0 14px;
+  }
+  .stage-portal .gt-stat-v {
+    font-size: clamp(26px, 2.2vw, 34px);
   }
 }
 
@@ -203,11 +311,11 @@
     top: auto;
     bottom: calc(var(--safe-bottom) + 4px);
   }
-  .stage-portal .gt-panel {
-    position: relative;
+  .stage-portal .gt-proc,
+  .stage-portal .gt-proof {
     width: 100%;
   }
-  /* soft scrims so flying segments never sit on top of the readouts;
+  /* soft scrims so flying segments never sit on top of the copy;
      they live on the panels, so they fade in and out with them */
   .stage-portal .gt-panel::before {
     content: '';
@@ -217,53 +325,144 @@
     right: calc(-1 * var(--gutter));
     pointer-events: none;
   }
-  .stage-portal .gt-side--left .gt-panel::before {
+  .stage-portal .gt-proc::before {
     top: calc(-1 * var(--safe-top));
-    bottom: -48px;
+    bottom: -40px;
     background: linear-gradient(
       to bottom,
-      rgba(2, 3, 4, 0.7) 0%,
-      rgba(2, 3, 4, 0.62) 62%,
+      rgba(2, 3, 4, 0.72) 0%,
+      rgba(2, 3, 4, 0.64) 70%,
       rgba(2, 3, 4, 0)
     );
   }
-  .stage-portal .gt-panel--tele::before {
-    top: -56px;
+  .stage-portal .gt-proof::before {
+    top: -44px;
     bottom: calc(-1 * var(--safe-bottom) - 4px);
     background: linear-gradient(
       to top,
       rgba(2, 3, 4, 0.9) 0%,
-      rgba(2, 3, 4, 0.8) 58%,
+      rgba(2, 3, 4, 0.8) 62%,
       rgba(2, 3, 4, 0)
     );
   }
-  .stage-portal .gt-panel .hud-eyebrow {
-    margin-bottom: 10px;
+
+  .stage-portal .gt-eyebrow {
+    margin-bottom: 8px;
   }
-  .stage-portal .gt-readout {
-    flex-direction: row;
-    align-items: baseline;
-    justify-content: space-between;
+  .stage-portal .gt-title {
+    font-size: clamp(19px, 5.4vw, 30px);
+    margin-bottom: 16px;
   }
-  .stage-portal .gt-pct {
-    font-size: 40px;
+
+  /* steps become a four-up timeline; the rail runs across the top */
+  .stage-portal .gt-steps {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0 8px;
   }
-  .stage-portal .gt-bar {
-    height: 8px;
-    margin: 10px 0 8px;
+  .stage-portal .gt-step,
+  .stage-portal .gt-step:last-child {
+    padding: 12px 0 0;
   }
-  .stage-portal .gt-tele-row {
-    padding: 8px 0;
-    font-size: 10px;
+  .stage-portal .gt-step::before,
+  .stage-portal .gt-step-fill,
+  .stage-portal .gt-step:last-child::before,
+  .stage-portal .gt-step:last-child .gt-step-fill {
+    left: 12px;
+    right: -8px;
+    top: 4px;
+    bottom: auto;
+    width: auto;
+    height: 1px;
   }
-  .stage-portal .gt-tele-row.is-extra {
+  .stage-portal .gt-step:last-child::before,
+  .stage-portal .gt-step:last-child .gt-step-fill {
+    right: 0;
+  }
+  .stage-portal .gt-step-fill {
+    transform-origin: 0 50%;
+    transform: scaleX(0);
+  }
+  .stage-portal .gt-step-dot {
+    top: 0;
+  }
+  .stage-portal .gt-step-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1px;
+  }
+  .stage-portal .gt-step-n {
+    font-size: 9px;
+  }
+  .stage-portal .gt-step-t {
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+  }
+  .stage-portal .gt-step-x {
     display: none;
   }
-  .stage-portal .gt-cue-wrap {
-    top: calc(50% + 24px);
+  .stage-portal .gt-read {
+    display: grid;
+    margin-top: 10px;
+  }
+  .stage-portal .gt-read-x {
+    grid-area: 1 / 1;
+    margin: 0;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.5;
+    color: rgba(242, 246, 244, 0.86);
+    text-shadow: 0 1px 10px rgba(2, 3, 4, 0.95);
+    opacity: 0;
+    transition: opacity 0.4s ease;
+  }
+  .stage-portal .gt-read-x.is-active {
+    opacity: 1;
+  }
+
+  /* readouts: three across */
+  .stage-portal .gt-proof-k {
+    display: none;
+  }
+  .stage-portal .gt-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0 14px;
+    border-top: 0;
+  }
+  .stage-portal .gt-stat {
+    padding: 10px 0 0;
+    border-bottom: 0;
+    border-top: 1px solid var(--line);
+  }
+  .stage-portal .gt-stat-v {
+    font-size: clamp(20px, 5.6vw, 30px);
+  }
+  .stage-portal .gt-stat-l {
+    margin-top: 6px;
+    font-size: clamp(10.5px, 2.8vw, 13px);
+    line-height: 1.4;
+  }
+
+  .stage-portal .gt-key {
+    font-size: 9px;
   }
   .stage-portal .gt-cue-title {
     font-size: 11px;
     letter-spacing: 0.26em;
+  }
+}
+
+/* short phones (iPhone SE class): the eyebrow carries the heading */
+@media (max-width: 767px) and (max-height: 700px) {
+  .stage-portal .gt-title {
+    display: none;
+  }
+  .stage-portal .gt-eyebrow {
+    margin-bottom: 12px;
+  }
+  .stage-portal .gt-read-x {
+    font-size: 12.5px;
+    line-height: 1.45;
   }
 }

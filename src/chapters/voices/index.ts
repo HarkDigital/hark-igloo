@@ -3,29 +3,35 @@ import type { Chapter, ChapterContext, Frame } from '../../core/types'
 import { Callout, el, reveal } from '../../core/dom'
 import { scrambleAt } from '../../core/scramble'
 import { clamp, damp, ease, lerp, remap, segment, window01 } from '../../core/math'
-import { TESTIMONIALS } from '../../content'
+import { SECTIONS, TESTIMONIALS } from '../../content'
 import { Pulsar } from './pulsar'
 import { Waveform } from './waveform'
 import './voices.css'
 
 /*
  * VOICES — client testimonials arrive as decoded radio transmissions.
+ * (Follows SHIELD, whose out-beat traces an incoming carrier back to this
+ * same pulsar; ends collapsing into a point + shock ring → the GATE.)
  *
  * 3D (scroll-driven by local):
- *   0.00–0.07  in-beat: camera rushes in, the signal line draws out of the pulsar
- *   0.07–0.93  eight equal beats, one per testimonial:
+ *   0.00–0.08  in-beat: camera rushes in on the pulsar, the signal line draws
+ *              out of it toward the viewer
+ *   0.014–0.09 the section headline: "We listen. They talk."
+ *   0.09–0.93  eight equal beats (~0.36vh each), one per testimonial:
  *                0.00–0.26  a packet races down the waveform toward the viewer
  *                0.28–0.92  the waveform "speaks" (voice modulation)
  *   0.93–1.00  out-beat: the waveform retracts into the pulsar, which flares
  *              into a bright point and a shock ring blooms (next: ring portal)
  *
- * DOM (time-driven so it always settles): the beat under the scroll position
- * picks WHICH transmission is shown; entering a beat cross-fades to it and
- * plays a ~0.7 s decode (header → telemetry → quote word sweep → name). At
- * rest the text is always fully resolved and fully opaque.
+ * DOM (time-driven so it always settles): the scroll position picks which
+ * card SHOULD show (headline or a transmission); a card, once it starts
+ * decoding (~0.5 s), is held until it has settled and dwelt ~0.6 s, so a slow
+ * steady scroll never cuts a quote off mid-read. At rest the text is always
+ * fully resolved and fully opaque.
  */
 
-const B0 = 0.07
+const HEAD_ON = 0.014
+const B0 = 0.09
 const B1 = 0.93
 const N = TESTIMONIALS.length
 const SPAN = (B1 - B0) / N
@@ -38,9 +44,13 @@ const noiseWord = (n: number) => {
 const pad = (n: number) => String(n).padStart(2, '0')
 
 /** decode timeline of one transmission, in seconds after it starts to show */
-const T_WORDS0 = 0.14
-const T_WORDS1 = 0.62
-const T_DONE = 0.9
+const T_WORDS0 = 0.06
+const T_WORDS1 = 0.36
+const T_DONE = 0.5
+/** the headline's rise + decode */
+const H_DONE = 0.72
+/** once settled, a card stays at least this long before the next may replace it */
+const DWELL = 0.6
 
 function setText(node: HTMLElement, s: string) {
   if (node.textContent !== s) node.textContent = s
@@ -53,8 +63,19 @@ interface Word {
   state: number
 }
 
-interface Tx {
+/** Anything the deck shows in its single slot. */
+interface Card {
   root: HTMLElement
+  /** 0..1 damped opacity */
+  vis: number
+  /** frame time the decode started, -1 when idle */
+  start: number
+  /** decode fully resolved (no more per-frame DOM writes except telemetry) */
+  settled: boolean
+  lastStyle: string
+}
+
+interface Tx extends Card {
   inc: HTMLElement
   incText: string
   src: HTMLElement
@@ -66,15 +87,13 @@ interface Tx {
   mark: HTMLElement
   words: Word[]
   by: HTMLElement
-  /** 0..1 damped opacity */
-  vis: number
-  /** frame time the decode started, -1 when idle */
-  start: number
-  /** decode fully resolved (no more per-frame DOM writes except telemetry) */
-  settled: boolean
-  /** scroll-coupled drift (px) kept while fading out */
-  drift: number
-  lastStyle: string
+}
+
+interface Headline extends Card {
+  eyebrow: HTMLElement
+  lines: HTMLElement[]
+  meta: HTMLElement
+  metaText: string
 }
 
 interface Layout {
@@ -97,6 +116,9 @@ export default function create(): Chapter {
   let pulsar: Pulsar
   let wave: Waveform
   const txs: Tx[] = []
+  let headline: Headline
+  /** deck slots: 0 = headline, 1..N = transmissions */
+  const cards: Card[] = []
   let head: HTMLElement
   let eyebrow: HTMLElement
   let meter: HTMLElement[] = []
@@ -115,7 +137,7 @@ export default function create(): Chapter {
   let lastMeter = -2
 
   // time-driven DOM state
-  let active = -1
+  let shown = -1
   let kickAt = -10
   let headVis = 0
   let headStart = -1
@@ -157,9 +179,38 @@ export default function create(): Chapter {
     status = el('span', 'vx-status', '', row)
 
     const deck = el('div', 'vx-deck', undefined, stage)
+
+    // the section headline shares the deck's slot with the transmissions
+    const hl = el('div', 'vx-hl', undefined, deck)
+    const hlEyebrow = el('p', 'hud-eyebrow', '', hl)
+    const title = el('h2', 'hud-title vx-hl-title', undefined, hl)
+    const parts = SECTIONS.voices.title.match(/[^?.!]+[?.!]*/g)?.map(p => p.trim()).filter(Boolean) ?? [SECTIONS.voices.title]
+    const lines: HTMLElement[] = []
+    parts.forEach((part, i) => {
+      const line = el('span', 'vx-hl-line', undefined, title)
+      const cls = i === parts.length - 1 && parts.length > 1 ? 'vx-hl-in vx-hl-sig' : 'vx-hl-in'
+      lines.push(el('span', cls, part, line))
+      if (i < parts.length - 1) title.appendChild(document.createTextNode(' '))
+    })
+    const hlMeta = el('p', 'vx-hl-meta', '', hl)
+    hlMeta.setAttribute('aria-hidden', 'true')
+    hl.style.visibility = 'hidden'
+    hl.style.opacity = '0'
+    headline = {
+      root: hl,
+      vis: 0,
+      start: -1,
+      settled: false,
+      lastStyle: '',
+      eyebrow: hlEyebrow,
+      lines,
+      meta: hlMeta,
+      metaText: `Scanning 1420 MHz · ${pad(N)} transmissions queued`,
+    }
+    cards.push(headline)
+
     TESTIMONIALS.forEach((t, i) => {
       const root = el('article', 'vx-tx', undefined, deck)
-      root.setAttribute('aria-label', `Testimonial ${i + 1} of ${N}: ${t.name}, ${t.company}`)
       const meta = el('div', 'vx-meta', undefined, root)
       meta.setAttribute('aria-hidden', 'true')
       const incText = `INCOMING TRANSMISSION ${pad(i + 1)}/${pad(N)}`
@@ -192,7 +243,7 @@ export default function create(): Chapter {
 
       root.style.visibility = 'hidden'
       root.style.opacity = '0'
-      txs.push({
+      const tx: Tx = {
         root,
         inc,
         incText,
@@ -208,9 +259,10 @@ export default function create(): Chapter {
         vis: 0,
         start: -1,
         settled: false,
-        drift: 0,
         lastStyle: '',
-      })
+      }
+      txs.push(tx)
+      cards.push(tx)
     })
 
     starCallout = new Callout(stage, { side: 'left', offset: { x: 70, y: -54 } })
@@ -227,10 +279,22 @@ export default function create(): Chapter {
     if (s !== 1) w.noise.textContent = ''
   }
 
-  /** Put a transmission back to its undecoded state (while invisible). */
-  function resetTx(tx: Tx) {
-    tx.start = -1
-    tx.settled = false
+  /** Put a card back to its undecoded state (only while invisible). */
+  function resetCard(slot: number) {
+    const c = cards[slot]
+    c.start = -1
+    c.settled = false
+    if (slot === 0) {
+      const h = headline
+      setText(h.eyebrow, '')
+      setText(h.meta, '')
+      for (const ln of h.lines) {
+        ln.style.transform = 'translate3d(0, 108%, 0)'
+        ln.parentElement!.classList.remove('is-done')
+      }
+      return
+    }
+    const tx = txs[slot - 1]
     for (const w of tx.words) setWord(w, 0)
     setText(tx.inc, '')
     setText(tx.src, '')
@@ -249,20 +313,44 @@ export default function create(): Chapter {
     return `FREQ ${tx.freq} MHZ · SNR ${snr} DB · T+00:${pad(mins)}:${pad(secs)}`
   }
 
-  /** Time-based decode. `tau` = seconds since the transmission began showing. */
+  /** Time-based headline decode: eyebrow types in, the two lines rise. */
+  function decodeHeadline(tau: number, calm: boolean) {
+    const h = headline
+    if (h.settled) return
+    const at = (a: number, b: number) => (calm ? 1 : clamp((tau - a) / (b - a)))
+    setText(h.eyebrow, scrambleAt(SECTIONS.voices.eyebrow, at(0, 0.4)))
+    h.lines.forEach((ln, i) => {
+      const k = ease.outCubic(at(0.04 + i * 0.12, 0.5 + i * 0.12))
+      ln.style.transform = `translate3d(0, ${((1 - k) * 108).toFixed(1)}%, 0)`
+      // drop the mask once risen so the glow isn't cut into a box
+      ln.parentElement!.classList.toggle('is-done', k >= 0.999)
+    })
+    setText(h.meta, scrambleAt(h.metaText, at(0.3, 0.66)))
+    if (calm || tau >= H_DONE) {
+      setText(h.eyebrow, SECTIONS.voices.eyebrow)
+      setText(h.meta, h.metaText)
+      for (const ln of h.lines) {
+        ln.style.transform = 'translate3d(0, 0%, 0)'
+        ln.parentElement!.classList.add('is-done')
+      }
+      h.settled = true
+    }
+  }
+
+  /** Time-based transmission decode. `tau` = seconds since it began showing. */
   function decodeTx(tx: Tx, tau: number, time: number, calm: boolean) {
     if (tx.settled) {
       setText(tx.tel, telemetry(tx, time))
       return
     }
-    const k = calm ? 2.2 : 1 // reduced motion: faster, no glyph noise
+    const k = calm ? 2 : 1 // reduced motion: faster, no glyph noise
     const tt = tau * k
     const at = (a: number, b: number) => clamp((tt - a) / (b - a))
-    setText(tx.inc, scrambleAt(tx.incText, calm ? 1 : at(0, 0.34)))
-    setText(tx.src, scrambleAt(tx.srcText, calm ? 1 : at(0.06, 0.42)))
-    setText(tx.tel, scrambleAt(telemetry(tx, time), calm ? 1 : at(0.1, 0.46)))
-    tx.rule.style.transform = `scaleX(${ease.outCubic(at(0.04, 0.5)).toFixed(3)})`
-    reveal(tx.mark, at(0.08, 0.3), 6)
+    setText(tx.inc, scrambleAt(tx.incText, calm ? 1 : at(0, 0.24)))
+    setText(tx.src, scrambleAt(tx.srcText, calm ? 1 : at(0.04, 0.3)))
+    setText(tx.tel, scrambleAt(telemetry(tx, time), calm ? 1 : at(0.06, 0.34)))
+    tx.rule.style.transform = `scaleX(${ease.outCubic(at(0.02, 0.36)).toFixed(3)})`
+    reveal(tx.mark, at(0.04, 0.2), 6)
 
     // word sweep: a short window of glyph noise runs across the quote
     const W = calm ? 0 : 2.4
@@ -274,7 +362,7 @@ export default function create(): Chapter {
       setWord(words[j], s)
       if (s === 1) words[j].noise.textContent = noiseWord(words[j].len)
     }
-    reveal(tx.by, at(0.48, 0.72), 8)
+    reveal(tx.by, at(0.28, 0.46), 8)
     if (tt >= T_DONE) {
       // snap everything to its final state once
       setText(tx.inc, tx.incText)
@@ -287,42 +375,78 @@ export default function create(): Chapter {
     }
   }
 
-  function updateDeck(bi: number, ph: number, inBeat: boolean, frame: Frame, calm: boolean) {
+  /** Which deck slot the scroll position asks for (-1: none). */
+  function wantAt(local: number) {
+    if (local < HEAD_ON || local >= B1) return -1
+    if (local < B0) return 0
+    return 1 + Math.min(N - 1, Math.floor((local - B0) / SPAN))
+  }
+  /** position in the running order, to tell a neighbour from a jump */
+  const order = (slot: number, local: number) => (slot >= 0 ? slot : local < 0.5 ? -1 : N + 1)
+
+  function updateDeck(local: number, frame: Frame, calm: boolean) {
     const now = frame.time
     const dt = frame.dt
-    const want = inBeat ? bi : -1
-    if (want !== active) {
-      active = want
-      if (want >= 0) kickAt = now
+    const want = wantAt(local)
+    if (want !== shown) {
+      // Hold a card that has started decoding until it is read: settled plus
+      // a dwell. Then step to the next card in order, so a steady scroll that
+      // runs slightly ahead still shows every quote. Lagging three or more
+      // cards behind (a jump, a fast flick) skips straight to the scroll
+      // position, cutting a dwell short but never a decode.
+      const cur = shown >= 0 ? cards[shown] : null
+      // queued behind the previous card's fade-out: keep its place in line
+      const pending = cur !== null && cur.start < 0
+      const age = cur && cur.start >= 0 ? now - cur.start : -1
+      const done = (shown === 0 ? H_DONE : T_DONE) / (calm ? 2 : 1)
+      const settled = age < 0 || age >= done
+      const dwelled = age < 0 || age >= done + DWELL
+      const wo = order(want, local)
+      const so = order(shown, local)
+      const far = Math.abs(wo - so) >= 3
+      // nothing on screen (fresh entry or a jump in): go straight to the card
+      if (!cur || (far && settled)) shown = want
+      else if (dwelled && !pending) {
+        const next = so + Math.sign(wo - so)
+        shown = next < 0 || next > N ? -1 : next
+      }
     }
     let others = 0
-    for (let i = 0; i < N; i++) if (i !== active) others = Math.max(others, txs[i].vis)
+    for (let i = 0; i < cards.length; i++) if (i !== shown) others = Math.max(others, cards[i].vis)
 
-    for (let i = 0; i < N; i++) {
-      const tx = txs[i]
-      const on = i === active && others < 0.3
-      if (on && tx.start < 0) {
-        resetTx(tx)
-        tx.start = now
+    const x = (local - B0) / SPAN
+    for (let i = 0; i < cards.length; i++) {
+      const c = cards[i]
+      const on = i === shown && others < 0.3
+      if (on && c.start < 0) {
+        resetCard(i)
+        c.start = now
+        if (i > 0) kickAt = now
       }
       const target = on ? 1 : 0
-      tx.vis = damp(tx.vis, target, on ? 10 : 18, dt)
-      if (Math.abs(tx.vis - target) < 0.004) tx.vis = target
-      if (i === active) tx.drift = (0.5 - ph) * 12
-      if (!on && tx.vis === 0 && tx.start >= 0 && i !== active) tx.start = -1
+      c.vis = damp(c.vis, target, on ? 10 : 18, dt)
+      if (Math.abs(c.vis - target) < 0.004) c.vis = target
+      // gone: back to undecoded so nothing (bylines included) lingers
+      if (!on && c.vis === 0 && c.start >= 0) resetCard(i)
 
-      const o = tx.vis
-      const dy = (1 - o) * (i === active ? 16 : -16) + (calm ? 0 : tx.drift)
+      const o = c.vis
+      // a slow scroll-coupled drift through the card's own beat (continuous
+      // even while a card is held past its beat)
+      const ph = i === 0 ? (local - HEAD_ON) / (B0 - HEAD_ON) : x - (i - 1)
+      const drift = calm ? 0 : (0.5 - clamp(ph, -0.3, 1.3)) * 10
+      const dy = (1 - o) * (i === shown ? 16 : -16) + drift
       const style = `${o.toFixed(3)}|${dy.toFixed(1)}`
-      if (style !== tx.lastStyle) {
-        tx.lastStyle = style
-        tx.root.style.opacity = o.toFixed(3)
-        tx.root.style.transform = `translate3d(0, ${dy.toFixed(1)}px, 0)`
-        tx.root.style.visibility = o < 0.002 ? 'hidden' : 'visible'
+      if (style !== c.lastStyle) {
+        c.lastStyle = style
+        c.root.style.opacity = o.toFixed(3)
+        c.root.style.transform = `translate3d(0, ${dy.toFixed(1)}px, 0)`
+        c.root.style.visibility = o < 0.002 ? 'hidden' : 'visible'
       }
-      if (o > 0 && tx.start >= 0) decodeTx(tx, now - tx.start, now, calm)
+      if (o > 0 && c.start >= 0) {
+        if (i === 0) decodeHeadline(now - c.start, calm)
+        else decodeTx(txs[i - 1], now - c.start, now, calm)
+      }
     }
-    return others
   }
 
   return {
@@ -335,18 +459,19 @@ export default function create(): Chapter {
       wave = new Waveform(ctx.mobile)
       group.add(wave.group)
       buildDom(ctx.stage)
+      for (let i = 0; i < cards.length; i++) resetCard(i)
     },
 
     onEnter() {
-      // replay the header + transmission decode every time the chapter is entered
+      // replay the header + every card's decode each time the chapter is entered
       headStart = -1
       headVis = 0
       calloutVis = 0
-      active = -1
-      for (const tx of txs) {
-        tx.vis = 0
-        tx.start = -1
-        tx.lastStyle = ''
+      shown = -1
+      for (let i = 0; i < cards.length; i++) {
+        cards[i].vis = 0
+        cards[i].lastStyle = ''
+        resetCard(i)
       }
     },
 
@@ -359,12 +484,17 @@ export default function create(): Chapter {
       const ph = x - bi
       const inBeat = bi >= 0 && bi < N
       const outBeat = ease.inCubic(segment(local, 0.93, 1))
+
+      // ---- DOM: the deck first (it decides what is on screen)
+      updateDeck(local, frame, calm)
+      const rx = shown >= 1 ? shown - 1 : -1
+
       // brief time-based punch whenever a new transmission locks on; decays
       // to nothing so nothing glitches at rest
-      const kick = calm ? 0 : Math.exp(-Math.max(0, frame.time - kickAt) * 7) * (inBeat ? 1 : 0)
+      const kick = calm ? 0 : Math.exp(-Math.max(0, frame.time - kickAt) * 7) * (rx >= 0 ? 1 : 0)
 
       // ---- the signal line
-      const drawOn = ease.outCubic(segment(local, 0.0, 0.075))
+      const drawOn = ease.outCubic(segment(local, 0.0, 0.08))
       const collapse = 1 - ease.inCubic(segment(local, 0.925, 0.975))
       const u = wave.u
       u.uTime.value = t
@@ -403,18 +533,19 @@ export default function create(): Chapter {
       ctx.sky.params.nebula = 0.75
       ctx.sky.params.warp = (1 - drawOn) * 0.7 + outBeat * 0.8
 
-      // ---- DOM: header (time-damped so it never rests half-faded)
+      // ---- DOM: header (time-damped so it never rests half-faded). It takes
+      // over from the headline: off while the headline card owns the screen.
       const dt = frame.dt
-      const headOn = local > 0.018 && local < 0.945
+      const headOn = local > HEAD_ON && local < 0.945 && (rx >= 0 || (shown < 0 && local >= B0))
       headVis = damp(headVis, headOn ? 1 : 0, headOn ? 8 : 14, dt)
       if (Math.abs(headVis - (headOn ? 1 : 0)) < 0.004) headVis = headOn ? 1 : 0
       reveal(head, headVis, 0)
       if (headOn && headStart < 0) headStart = frame.time
       if (!headOn && headVis === 0) headStart = -1
       if (headVis > 0) {
-        const hs = headStart < 0 ? 1 : (frame.time - headStart) / 0.6
-        setText(eyebrow, scrambleAt('Client transmissions', calm ? 1 : hs))
-        const on = inBeat ? bi : local >= B1 ? N : -1
+        const hs = headStart < 0 ? 1 : (frame.time - headStart) / 0.5
+        setText(eyebrow, scrambleAt(SECTIONS.voices.eyebrow, calm ? 1 : hs))
+        const on = rx >= 0 ? rx : local >= B1 ? N : -1
         if (on !== lastMeter) {
           meter.forEach((m, i) => {
             m.classList.toggle('is-on', i === on)
@@ -422,19 +553,16 @@ export default function create(): Chapter {
           })
           lastMeter = on
         }
-        const st =
-          local < B0 ? 'SCANNING · 1420 MHZ' : inBeat ? `RX ${pad(bi + 1)}/${pad(N)}` : `${pad(N)}/${pad(N)} DECODED`
+        const st = rx >= 0 ? `RX ${pad(rx + 1)}/${pad(N)}` : local >= B1 ? `${pad(N)}/${pad(N)} DECODED` : 'SCANNING · 1420 MHZ'
         if (st !== statusText) {
           statusText = st
           statusStart = frame.time
         }
-        setText(status, scrambleAt(st, calm ? 1 : (frame.time - statusStart) / 0.4))
+        setText(status, scrambleAt(st, calm ? 1 : (frame.time - statusStart) / 0.35))
       }
 
-      // ---- DOM: the transmissions
-      updateDeck(bi, ph, inBeat, frame, calm)
       let any = 0
-      for (const tx of txs) any = Math.max(any, tx.vis)
+      for (const c of cards) any = Math.max(any, c.vis)
       scrimVis = damp(scrimVis, Math.max(any, headVis * 0.6), 8, dt)
       reveal(scrim, scrimVis, 0)
 

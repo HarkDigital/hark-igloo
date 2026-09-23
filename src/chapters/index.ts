@@ -11,7 +11,7 @@ export const CHAPTERS: ChapterDef[] = [
   { id: 'work', label: 'Artifacts', length: 3.8, landing: 0.13, load: () => import('./work/index') },
   { id: 'services', label: 'Orbit', length: 4.6, landing: 0.08, load: () => import('./services/index') },
   { id: 'shield', label: 'Shield', length: 1.5, load: () => import('./shield/index') },
-  { id: 'voices', label: 'Transmissions', length: 3.4, load: () => import('./voices/index') },
+  { id: 'voices', label: 'Transmissions', length: 3.4, landing: 0.05, load: () => import('./voices/index') },
   { id: 'portal', label: 'Gate', length: 1.8, load: () => import('./portal/index') },
   { id: 'contact', label: 'Arrival', length: 1.4, landing: 0.3, load: () => import('./contact/index') },
 ]

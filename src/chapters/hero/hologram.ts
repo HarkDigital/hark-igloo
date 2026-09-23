@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { logoFaceGeometry, logoOutlines, logoParts } from '../../logo/logo'
-import { COLOR_GLSL, MARK_DEPTH } from './shared'
+import { COLOR_GLSL, CONTOUR_EPS, MARK_DEPTH, simplifyShape } from './shared'
 
 /*
  * The opening "signal": the Hark mark as a hologram. Thin glowing contour
@@ -255,7 +255,7 @@ export class Hologram {
 
     // faint face fill
     const face = new THREE.Mesh(
-      logoFaceGeometry(shapes),
+      logoFaceGeometry(shapes.map(s => simplifyShape(s, CONTOUR_EPS))),
       new THREE.ShaderMaterial({
         vertexShader: FACE_VERT,
         fragmentShader: FACE_FRAG,

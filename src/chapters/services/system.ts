@@ -22,13 +22,13 @@ export const STAR_R = 0.42
 /** Scroll timeline (chapter-local 0..1). */
 export const TL = {
   /** camera has emerged from the logo core */
-  emergeEnd: 0.08,
+  emergeEnd: 0.065,
   /** establishing shot starts travelling to the first world */
-  holdEnd: 0.1,
+  holdEnd: 0.088,
   /** first service slot starts */
-  s0: 0.13,
+  s0: 0.105,
   /** last service slot ends; exit beat begins */
-  s1: 0.94,
+  s1: 0.935,
 }
 export const SLOT = (TL.s1 - TL.s0) / COUNT
 /** local progress at which service k is centered */

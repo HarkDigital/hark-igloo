@@ -14,6 +14,8 @@ import { BRAND, CONTACT, PROCESS, SECTIONS, SECURITY, SERVICES, STATS, TESTIMONI
 const esc = (s: string) =>
   s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 
+const isPreview = (url: string) => /harktest\.com/.test(url)
+
 const ext = (href: string, label: string) =>
   `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}<span class="sr-note"> (opens in a new tab)</span></a>`
 
@@ -22,13 +24,17 @@ const COPY: Record<string, () => string> = {
     <p class="sr-kicker">${esc(BRAND.name)} · ${esc(BRAND.locale)}</p>
     <h1>${esc(BRAND.tagline)}</h1>
     <p>${esc(BRAND.manifesto)}</p>
-    <p><a href="#work" data-land="work">See the work</a> · <a href="${esc(CONTACT.href)}">Start a project</a></p>`,
+    <p><a href="#work" data-land="work">See the work</a> · <a href="#contact" data-land="contact">Start a project</a></p>`,
 
   work: () => `
     <h2>${esc(SECTIONS.work.title)}</h2>
-    <p>${esc(SECTIONS.work.eyebrow)} — ${WORK.length} live sites.</p>
+    <p>${esc(SECTIONS.work.eyebrow)} — ${WORK.length} sites.</p>
     <ul>${WORK.map(
-      w => `<li><h3>${esc(w.name)}</h3><p>${esc(w.industry)}. ${esc(w.blurb)}</p><p>${ext(w.url, `Visit ${w.name}`)}</p></li>`,
+      w =>
+        `<li><h3>${esc(w.name)}</h3><p>${esc(w.industry)}. ${esc(w.blurb)}</p><p>${ext(
+          w.url,
+          isPreview(w.url) ? `Preview ${w.name} (pre-launch build)` : `Visit ${w.name}`,
+        )}</p></li>`,
     ).join('')}</ul>`,
 
   services: () => `
@@ -53,13 +59,14 @@ const COPY: Record<string, () => string> = {
 
   portal: () => `
     <h2>How we work</h2>
+    <p>We listen first. Then we build.</p>
     <ol>${PROCESS.map(p => `<li><h3>${esc(p.title)}</h3><p>${esc(p.text)}</p></li>`).join('')}</ol>
     <ul>${STATS.slice(0, 3).map(s => `<li>${esc(s.value)}: ${esc(s.label)}</li>`).join('')}</ul>`,
 
   contact: () => `
     <h2>${esc(CONTACT.title)}</h2>
     <p>${esc(CONTACT.body)}</p>
-    <p><a href="${esc(CONTACT.href)}">Email ${esc(BRAND.email)}</a></p>
+    <p><a href="${esc(CONTACT.href)}">Email ${esc(BRAND.email)}</a> <button type="button" data-copy-email>Copy email address</button> <span data-copy-status aria-live="polite"></span></p>
     <p>${ext(BRAND.classicSite, 'See the classic 2026 site')}</p>
     <p><a href="#hero" data-land="hero">Back to top</a></p>
     <p>© ${new Date().getFullYear()} ${esc(BRAND.name)} · ${esc(BRAND.locale)}</p>`,
@@ -81,6 +88,31 @@ export function buildChapterCopy(id: string, visible = false): HTMLElement | nul
       e.preventDefault()
       if (target === 'hero') hark.goto(0)
       else hark.land(target)
+    }),
+  )
+  div.querySelectorAll<HTMLButtonElement>('[data-copy-email]').forEach(btn =>
+    btn.addEventListener('click', async () => {
+      const status = div.querySelector<HTMLElement>('[data-copy-status]')
+      let ok = false
+      try {
+        await navigator.clipboard.writeText(BRAND.email)
+        ok = true
+      } catch {
+        const ta = document.createElement('textarea')
+        ta.value = BRAND.email
+        ta.setAttribute('readonly', '')
+        ta.style.position = 'fixed'
+        ta.style.opacity = '0'
+        document.body.appendChild(ta)
+        ta.select()
+        try {
+          ok = document.execCommand('copy')
+        } catch {
+          ok = false
+        }
+        ta.remove()
+      }
+      if (status) status.textContent = ok ? 'Copied' : `Copy failed — the address is ${BRAND.email}`
     }),
   )
   return div

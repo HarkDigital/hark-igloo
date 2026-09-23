@@ -65,7 +65,7 @@
   white-space: pre;
 }
 
-/* ---------- the deck: one transmission visible at a time ---------- */
+/* ---------- the deck: one card (headline or transmission) at a time ---------- */
 
 .stage-voices .vx-deck {
   position: absolute;
@@ -84,6 +84,54 @@
   margin: 0 0 0 clamp(0px, 4vw, 72px);
   visibility: hidden;
 }
+
+/* opening headline: shares the deck slot, handed over to the transmissions */
+.stage-voices .vx-hl {
+  grid-area: 1 / 1;
+  align-self: center;
+  margin: 0 0 0 clamp(0px, 4vw, 72px);
+  max-width: min(900px, 64vw);
+  visibility: hidden;
+}
+.stage-voices .vx-hl .hud-eyebrow {
+  margin: 0;
+  white-space: pre;
+}
+.stage-voices .vx-hl-title {
+  font-size: clamp(2.4rem, 5.2vw, 5.8rem);
+  margin: 18px 0 22px;
+  text-shadow: none;
+}
+.stage-voices .vx-hl-line {
+  display: block;
+  /* mask vertically only: the rising line never clips sideways */
+  clip-path: inset(-0.05em -40vw 0 -1em);
+  padding-bottom: 0.04em;
+  margin-bottom: -0.04em;
+}
+.stage-voices .vx-hl-line.is-done {
+  clip-path: none;
+}
+.stage-voices .vx-hl-in {
+  display: block;
+  will-change: transform;
+  text-shadow: 0 2px 28px rgba(2, 3, 4, 0.85);
+}
+.stage-voices .vx-hl-sig {
+  color: var(--signal);
+  text-shadow: 0 0 42px rgba(0, 255, 133, 0.32);
+}
+.stage-voices .vx-hl-meta {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: pre;
+  text-shadow: 0 1px 10px rgba(2, 3, 4, 0.95);
+}
+
 .stage-voices .vx-meta {
   display: flex;
   flex-wrap: wrap;
@@ -166,7 +214,7 @@
   display: inline-block;
 }
 .stage-voices .vx-w-r {
-  transition: opacity 0.28s ease;
+  transition: opacity 0.16s ease;
 }
 .stage-voices .vx-w[data-s='0'] .vx-w-r,
 .stage-voices .vx-w[data-s='1'] .vx-w-r {
@@ -249,10 +297,22 @@
     top: 38%;
     align-items: end;
   }
-  .stage-voices .vx-tx {
+  .stage-voices .vx-tx,
+  .stage-voices .vx-hl {
     width: auto;
+    max-width: none;
     margin: 0;
     align-self: end;
+  }
+  .stage-voices .vx-hl-title {
+    /* one sentence per line down to 375px */
+    font-size: clamp(1.8rem, 9vw, 4.4rem);
+    margin: 12px 0 16px;
+  }
+  .stage-voices .vx-hl-meta {
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    white-space: normal;
   }
   .stage-voices .vx-meta {
     flex-direction: column;
