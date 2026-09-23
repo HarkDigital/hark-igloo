@@ -7,7 +7,7 @@ import type { ChapterDef } from '../core/types'
  */
 export const CHAPTERS: ChapterDef[] = [
   { id: 'hero', label: 'Signal', length: 2.8, load: () => import('./hero/index') },
-  { id: 'services', label: 'Orbit', length: 4.2, load: () => import('./services/index') },
+  { id: 'services', label: 'Orbit', length: 5.5, load: () => import('./services/index') },
   { id: 'shield', label: 'Shield', length: 1.5, load: () => import('./shield/index') },
   { id: 'work', label: 'Artifacts', length: 3.8, load: () => import('./work/index') },
   { id: 'voices', label: 'Transmissions', length: 2.2, load: () => import('./voices/index') },

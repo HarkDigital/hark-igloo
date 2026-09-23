@@ -149,6 +149,28 @@ export const POST_DEFAULTS: PostParams = {
   exposure: 1,
 }
 
+/**
+ * Scrubs NaN/Inf and clamps runaway HDR right after the scene render. A single
+ * bad fragment would otherwise smear across the whole frame through the bloom
+ * mip chain and black it out.
+ */
+const SanitizeShader = {
+  uniforms: { tDiffuse: { value: null as THREE.Texture | null } },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+  `,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    varying vec2 vUv;
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      if (any(isnan(c)) || any(isinf(c))) c = vec4(0.0, 0.0, 0.0, 1.0);
+      gl_FragColor = vec4(clamp(c.rgb, 0.0, 64.0), c.a);
+    }
+  `,
+}
+
 export class Post {
   composer: EffectComposer
   bloom: UnrealBloomPass
@@ -175,6 +197,7 @@ export class Post {
     })
     this.composer = new EffectComposer(renderer, rt)
     this.composer.addPass(new RenderPass(scene, camera))
+    this.composer.addPass(new ShaderPass(SanitizeShader))
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), 0.9, 0.55, 0.62)
     this.composer.addPass(this.bloom)
     this.composer.addPass(new OutputPass())

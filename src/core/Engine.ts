@@ -71,6 +71,12 @@ export class Engine {
   private running = false
   private mobile: boolean
   private reducedMotion: boolean
+  /** adaptive resolution: multiplier on the device pixel ratio, lowered when frames run long */
+  private dprScale = 1
+  private perfEma = 1 / 60
+  private slowFor = 0
+  private fastFor = 0
+  private perfCooldown = 0
   private tmpRight = new THREE.Vector3()
   private tmpUp = new THREE.Vector3()
 
@@ -258,7 +264,8 @@ export class Engine {
     // track on real changes so the page doesn't jump
     const relayout = force || w !== this.vw || Math.abs(h - this.vh) > this.vh * 0.25
     this.vw = w
-    const dpr = Math.min(window.devicePixelRatio || 1, this.mobile ? 1.5 : 2)
+    const base = Math.min(window.devicePixelRatio || 1, this.mobile ? 1.5 : 2)
+    const dpr = Math.max(0.75, base * this.dprScale)
     this.renderer.setPixelRatio(dpr)
     this.renderer.setSize(w, h, false)
     this.post.setSize(w, h, dpr)
@@ -300,6 +307,28 @@ export class Engine {
     requestAnimationFrame(loop)
   }
 
+  /**
+   * Keep the frame rate up on weaker GPUs: drop the render resolution in
+   * steps while frames stay slow, and creep back up once there's headroom.
+   */
+  private adaptResolution(raw: number, dt: number) {
+    if (document.hidden || this.frame.time < 4) return
+    this.perfEma += (raw - this.perfEma) * 0.05
+    this.perfCooldown -= dt
+    this.slowFor = this.perfEma > 1 / 45 ? this.slowFor + dt : 0
+    this.fastFor = this.perfEma < 1 / 57 ? this.fastFor + dt : 0
+    if (this.slowFor > 1.5 && this.dprScale > 0.5) {
+      this.dprScale = Math.max(0.5, this.dprScale - 0.15)
+      this.slowFor = 0
+      this.perfCooldown = 6
+      this.resize()
+    } else if (this.fastFor > 8 && this.dprScale < 1 && this.perfCooldown <= 0) {
+      this.dprScale = Math.min(1, this.dprScale + 0.1)
+      this.fastFor = 0
+      this.resize()
+    }
+  }
+
   private applyCamera(parallax: number) {
     const cam = this.camera
     const pose = this.pose
@@ -323,8 +352,10 @@ export class Engine {
 
   private tick() {
     const f = this.frame
-    f.dt = Math.min(Math.max(this.timer.getDelta(), 0), 1 / 20)
+    const raw = Math.max(this.timer.getDelta(), 0)
+    f.dt = Math.min(raw, 1 / 20)
     f.time += f.dt
+    this.adaptResolution(Math.min(raw, 0.1), f.dt)
     f.pointer.x = damp(f.pointer.x, f.pointerRaw.x, 3.5, f.dt)
     f.pointer.y = damp(f.pointer.y, f.pointerRaw.y, 3.5, f.dt)
 

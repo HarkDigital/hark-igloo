@@ -14,13 +14,17 @@ export function el<K extends keyof HTMLElementTagNameMap>(
   return node
 }
 
-/** Set opacity + a small translate from a 0..1 visibility value (cheap, no layout). */
+/**
+ * Set opacity + a small translate from a 0..1 visibility value (cheap, no
+ * layout). With dy = 0 only opacity/visibility are touched, so the node's own
+ * CSS/JS transform is left alone.
+ */
 export function reveal(node: HTMLElement, v: number, dy = 14) {
   const o = Math.max(0, Math.min(1, v))
   const s = o.toFixed(3)
   if (node.style.opacity !== s) {
     node.style.opacity = s
-    node.style.transform = `translate3d(0, ${((1 - o) * dy).toFixed(2)}px, 0)`
+    if (dy !== 0) node.style.transform = `translate3d(0, ${((1 - o) * dy).toFixed(2)}px, 0)`
     node.style.visibility = o < 0.002 ? 'hidden' : 'visible'
   }
 }
@@ -70,14 +74,20 @@ export class Callout {
     const vis = behind ? 0 : visibility
     reveal(this.root, vis, 0)
     if (vis <= 0) return !behind
-    const dx = this.side === 'right' ? this.offset.x : -this.offset.x
+    const lw = this.label.offsetWidth
+    // flip to the other side rather than run off the edge of the screen
+    const margin = 12
+    let side = this.side
+    if (side === 'right' && x + this.offset.x + 8 + lw > w - margin) side = 'left'
+    else if (side === 'left' && x - this.offset.x - 8 - lw < margin) side = 'right'
+    const dx = side === 'right' ? this.offset.x : -this.offset.x
     const lx = x + dx
     const ly = y + this.offset.y
     const elbow = x + dx * 0.35
     this.path.setAttribute('d', `M${x},${y} L${elbow},${ly} L${lx},${ly}`)
     this.dot.style.transform = `translate3d(${x}px, ${y}px, 0)`
-    const lw = this.label.offsetWidth
-    this.label.style.transform = `translate3d(${this.side === 'right' ? lx + 8 : lx - 8 - lw}px, ${ly - 10}px, 0)`
+    const labelX = side === 'right' ? lx + 8 : lx - 8 - lw
+    this.label.style.transform = `translate3d(${Math.max(margin, Math.min(w - margin - lw, labelX))}px, ${ly - 10}px, 0)`
     return true
   }
 }

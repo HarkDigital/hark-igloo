@@ -73,9 +73,23 @@ try {
   for (const f of frames) {
     const [id, l] = f.split(':')
     const local = parseFloat(l ?? '0')
-    if (id === 'p') await page.evaluate(v => window.__hark.goto(v), local)
-    else await page.evaluate((c, v) => window.__hark.gotoChapter(c, v), id, local)
-    await new Promise(r => setTimeout(r, WAIT))
+    // a dev-server reload mid-run silently resets the page to the hero, so
+    // confirm the engine is in the requested chapter before capturing
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await page.waitForFunction('window.__hark && window.__hark.ready', { timeout: 90000 })
+      if (id === 'p') await page.evaluate(v => window.__hark.goto(v), local)
+      else await page.evaluate((c, v) => window.__hark.gotoChapter(c, v), id, local)
+      await new Promise(r => setTimeout(r, WAIT))
+      if (id === 'p') break
+      const at = await page
+        .evaluate(() => {
+          const s = window.__hark?.engine.state
+          return s ? s.slots[s.index].def.id : null
+        })
+        .catch(() => null)
+      if (at === id) break
+      console.log(`[shot] expected ${id}, found ${at} — retrying`)
+    }
     const file = path.join(out, `${tag}${id}-${local.toFixed(2)}.png`)
     await page.screenshot({ path: file })
     console.log(`saved ${file}`)
