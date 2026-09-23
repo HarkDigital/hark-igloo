@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { BRAND, CONTACT, MICROCOPY } from '../../content'
+import { BRAND, MICROCOPY } from '../../content'
 import { Callout, el, reveal } from '../../core/dom'
 import { Scramble, scrambleAt } from '../../core/scramble'
 import { clamp, ease } from '../../core/math'
@@ -158,7 +158,14 @@ export class HeroUI {
     el('span', 'hero-arrow', '→', work).setAttribute('aria-hidden', 'true')
     work.addEventListener('click', () => window.__hark?.land('work'))
     const start = el('a', 'hud-btn hud-btn--ghost', 'Start a project', this.ctas)
-    start.href = CONTACT.href
+    // land on the contact chapter (email CTA + copy-email) rather than a bare
+    // mailto, which does nothing for visitors without a desktop mail client
+    start.href = '#contact'
+    start.addEventListener('click', e => {
+      if (!window.__hark) return
+      e.preventDefault()
+      window.__hark.land('contact')
+    })
   }
 
   /** Pin callouts to a few landing bricks. */
