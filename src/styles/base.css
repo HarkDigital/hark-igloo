@@ -109,6 +109,13 @@ a {
 .stage.is-active {
   visibility: visible;
 }
+/* reveal() writes inline visibility:visible on children (and prewarm runs every
+   chapter's update once), which would punch through the hidden parent — keep
+   everything in an inactive stage hidden regardless. */
+.stage:not(.is-active),
+.stage:not(.is-active) * {
+  visibility: hidden !important;
+}
 .stage a,
 .stage button,
 .stage .hud-interactive {

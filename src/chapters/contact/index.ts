@@ -1,30 +1,294 @@
 import * as THREE from 'three'
-import type { Chapter } from '../../core/types'
-import { el } from '../../core/dom'
+import type { CameraPose, Chapter, ChapterContext, Frame } from '../../core/types'
+import { Callout, el, reveal } from '../../core/dom'
+import { scrambleAt } from '../../core/scramble'
+import { damp, ease, lerp, segment, smoothstep } from '../../core/math'
+import { BRAND, CONTACT } from '../../content'
+import { createMark, createPlatform, markUniforms } from './scene'
+import './contact.css'
 
-// PLACEHOLDER — replaced by the contact chapter build.
+/*
+ * ARRIVAL — the final chapter.
+ *
+ *   0.00–0.25  out of warp: particles overtake the camera as streaks and
+ *              condense into the Hark mark above a holographic platform
+ *   0.25–1.00  hold: calm, breathing, pointer-reactive; contact copy + links
+ */
+
+const MARK_Y = 0.42
+const PLATFORM_Y = -1.18
+
 export default function create(): Chapter {
   const group = new THREE.Group()
-  const mesh = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(1.4, 1),
-    new THREE.MeshBasicMaterial({ color: 0x00ff85, wireframe: true }),
-  )
-  group.add(mesh)
+  const markGroup = new THREE.Group()
+  const u = markUniforms()
+  let mobile = false
+  let motion = 1
+  let count = 0
+
+  let mark!: ReturnType<typeof createMark>
+  let platform!: ReturnType<typeof createPlatform>
+
+  const raycaster = new THREE.Raycaster()
+  const plane = new THREE.Plane()
+  const hit = new THREE.Vector3()
+  const tmp = new THREE.Vector3()
+  const normal = new THREE.Vector3()
+  const lastRaw = new THREE.Vector2(0, 0)
+  let pointerSeen = false
+  let lastMove = -99
+  let pointerAmt = 0
+  let pulseAt = -99
+  const pulseOrigin = new THREE.Vector3()
+  const pointerLocal = new THREE.Vector3(99, 99, 0)
+
+  const hud = {} as {
+    eyebrow: HTMLElement
+    title: HTMLElement
+    body: HTMLElement
+    cta: HTMLElement
+    links: HTMLElement
+    foot: HTMLElement
+    teleC: HTMLElement
+    teleK: HTMLElement
+    teleV: HTMLElement
+    callout: Callout
+  }
+
+  function buildHud(stage: HTMLElement) {
+    const wrap = el('div', 'ct-wrap', undefined, stage)
+    const copy = el('div', 'ct-copy', undefined, wrap)
+
+    const eyebrow = el('p', 'hud-eyebrow ct-eyebrow', CONTACT.eyebrow, copy)
+
+    const title = el('h2', 'hud-title ct-title', undefined, copy)
+    title.setAttribute('aria-label', CONTACT.title)
+    const [first, ...rest] = CONTACT.title.replace(/\.$/, '').split(' ')
+    const l1 = el('span', 'ct-line', first, title)
+    l1.setAttribute('aria-hidden', 'true')
+    title.append(' ')
+    const l2 = el('span', 'ct-line', rest.join(' '), title)
+    l2.setAttribute('aria-hidden', 'true')
+    if (CONTACT.title.endsWith('.')) el('span', 'ct-dot', '.', l2)
+
+    const body = el('p', 'hud-body ct-body', CONTACT.body, copy)
+
+    const cta = el('div', 'ct-cta', undefined, copy)
+    const btn = el('a', 'hud-btn ct-btn', undefined, cta)
+    btn.href = CONTACT.href
+    el('span', '', BRAND.email, btn)
+    el('span', 'ct-btn-arrow', '→', btn).setAttribute('aria-hidden', 'true')
+
+    const bottom = el('div', 'ct-bottom', undefined, stage)
+    const links = el('nav', 'ct-links', undefined, bottom)
+    links.setAttribute('aria-label', 'Contact and site links')
+    const email = el('a', 'ct-link', 'Email', links)
+    email.href = `mailto:${BRAND.email}`
+    el('span', 'ct-sep', '|', links).setAttribute('aria-hidden', 'true')
+    const classic = el('a', 'ct-link', 'Classic site', links)
+    classic.href = BRAND.classicSite
+    classic.target = '_blank'
+    classic.rel = 'noopener noreferrer'
+    el('span', 'ct-ext', ' ↗', classic).setAttribute('aria-hidden', 'true')
+    el('span', 'sr-only', ' (opens in a new tab)', classic)
+    el('span', 'ct-sep', '|', links).setAttribute('aria-hidden', 'true')
+    const top = el('button', 'ct-link ct-top', 'Back to top', links)
+    top.type = 'button'
+    top.addEventListener('click', () => window.__hark?.goto(0))
+
+    const foot = el('p', 'ct-foot', `© 2026 ${BRAND.name} · ${BRAND.locale}`, bottom)
+
+    // a single HUD callout on the mark, igloo-style
+    const callout = new Callout(stage, { side: 'right', offset: { x: 90, y: -70 } })
+    callout.root.setAttribute('aria-hidden', 'true')
+    callout.root.classList.add('ct-callout')
+    callout.label.innerHTML =
+      '<span class="ct-co-k"></span><span class="ct-co-v"></span><span class="ct-co-c"></span>'
+    const teleK = callout.label.querySelector<HTMLElement>('.ct-co-k')!
+    const teleV = callout.label.querySelector<HTMLElement>('.ct-co-v')!
+    const teleC = callout.label.querySelector<HTMLElement>('.ct-co-c')!
+
+
+    Object.assign(hud, { eyebrow, title, body, cta, links, foot, teleK, teleV, teleC, callout })
+  }
+
+  function layout(frame: Frame) {
+    const aspect = frame.width / Math.max(1, frame.height)
+    const portrait = aspect < 0.9
+    return { aspect, portrait }
+  }
+
+  /** Raycast the pointer onto the plane of the mark; result in mark-local units. */
+  function projectPointer(raw: THREE.Vector2, camera: THREE.Camera) {
+    raycaster.setFromCamera(raw, camera)
+    markGroup.updateMatrixWorld()
+    normal.set(0, 0, 1).transformDirection(markGroup.matrixWorld)
+    tmp.setFromMatrixPosition(markGroup.matrixWorld)
+    plane.setFromNormalAndCoplanarPoint(normal, tmp)
+    if (!raycaster.ray.intersectPlane(plane, hit)) return false
+    mark.points.worldToLocal(pointerLocal.copy(hit))
+    return true
+  }
+
+  function updatePointer(frame: Frame, ctx: ChapterContext, settle: number) {
+    const raw = frame.pointerRaw
+    if (raw.x !== lastRaw.x || raw.y !== lastRaw.y) {
+      // (0,0) is the engine's initial value — only react once a real pointer exists
+      pointerSeen = true
+      lastMove = frame.time
+      lastRaw.copy(raw)
+    }
+    let target = 0
+    if (pointerSeen && projectPointer(raw, ctx.camera)) {
+      const idle = frame.time - lastMove
+      // touch has no hover: let the dent relax after a moment
+      const hold = mobile ? 1 - smoothstep(0.8, 2.2, idle) : 1
+      target = hold * settle * (pointerLocal.length() < 1.2 ? 1 : 0)
+    }
+    pointerAmt = damp(pointerAmt, target, 5, frame.dt)
+    u.uPointer.value.copy(pointerLocal)
+    u.uPointerAmt.value = pointerAmt
+  }
+
   return {
     id: 'contact',
     group,
+
     init(ctx) {
-      el('p', 'hud-eyebrow', 'Arrival', ctx.stage).style.cssText = 'position:absolute;left:var(--gutter);top:var(--safe-top)'
-      el('h2', 'hud-h2', 'Say hello.', ctx.stage).style.cssText = 'position:absolute;left:var(--gutter);top:calc(var(--safe-top) + 28px)'
+      mobile = ctx.mobile
+      motion = ctx.reducedMotion ? 0.3 : 1
+      count = mobile ? 34000 : 68000
+      mark = createMark(count, mobile, u)
+      markGroup.add(mark.points, mark.trails)
+      markGroup.position.y = MARK_Y
+      group.add(markGroup)
+
+      platform = createPlatform(mobile)
+      platform.group.position.y = PLATFORM_Y
+      group.add(platform.group)
+
+      u.uPR.value = ctx.renderer.getPixelRatio()
+      platform.moteMat.uniforms.uPR.value = ctx.renderer.getPixelRatio()
+      buildHud(ctx.stage)
     },
-    update(local, frame) {
-      mesh.rotation.set(local * 3, frame.time * 0.2, 0)
+
+    update(l, frame, ctx) {
+      const time = frame.time * motion
+      const { portrait } = layout(frame)
+      const pr = ctx.renderer.getPixelRatio()
+      u.uPR.value = pr
+      platform.moteMat.uniforms.uPR.value = pr
+
+      // ---- arrival ------------------------------------------------------
+      const arrive = segment(l, 0.0, 0.26)
+      u.uAssemble.value = arrive
+      u.uTime.value = time
+      u.uMotion.value = motion
+      const S = portrait ? 1.6 : 1.9
+      markGroup.scale.setScalar(S)
+      // particles start just behind the camera (in mark-local units)
+      const camLocalZ = (ctx.camera.position.z - markGroup.position.z) / S
+      u.uStartZ.value = camLocalZ + 0.4
+      u.uSize.value = (portrait ? 9 : 10) * S
+      u.uBright.value = 1 + (1 - smoothstep(0.2, 0.34, l)) * 0.25
+      mark.trails.visible = arrive < 0.99
+
+      // holographic scan sweeps up the mark every few seconds
+      const cycle = (time * 0.16) % 1
+      u.uScanY.value = lerp(-0.9, 0.9, cycle) + (arrive < 1 ? 9 : 0)
+
+      // gentle float + sway; a slow scroll-driven turn during the hold
+      const hold = smoothstep(0.22, 1, l)
+      markGroup.position.y = MARK_Y + Math.sin(time * 0.55) * 0.035
+      markGroup.rotation.y = Math.sin(time * 0.21) * 0.16 + lerp(-0.12, 0.14, hold)
+      markGroup.rotation.x = Math.sin(time * 0.17) * 0.03 - 0.04
+
+      // pointer + click pulse
+      updatePointer(frame, ctx, smoothstep(0.2, 0.3, l))
+      u.uPulse.value.set(pulseOrigin.x, pulseOrigin.y, 0, frame.time - pulseAt)
+
+      // ---- platform -----------------------------------------------------
+      platform.uTime.value = time
+      const pOn = smoothstep(0.06, 0.24, l)
+      platform.uOn.value = pOn
+      platform.rings[0].rotation.z = time * 0.12
+      platform.rings[1].rotation.z = -time * 0.05
+      platform.rings[2].rotation.z = time * 0.03
+      platform.group.scale.setScalar(lerp(0.6, 1, ease.outCubic(pOn)) * (portrait ? 0.72 : 0.78))
+
+      // ---- post / sky -----------------------------------------------------
+      const pp = ctx.post.params
+      pp.bloomStrength = 0.62 + (1 - arrive) * 0.3
+      pp.bloomRadius = 0.16 + (1 - arrive) * 0.2
+      pp.bloomThreshold = 0.62
+      pp.flash = (1 - smoothstep(0, 0.05, l)) * 0.45
+      pp.glitch = (1 - smoothstep(0, 0.035, l)) * 0.3
+      pp.aberration = 0.0025 + (1 - smoothstep(0, 0.2, l)) * 0.008
+      pp.vignette = 0.62
+      ctx.sky.params.warp = 1 - ease.outCubic(segment(l, 0, 0.2))
+      ctx.sky.params.nebula = 0.8 + hold * 0.2
+      ctx.sky.params.stars = 1
+
+      // ---- HUD ----------------------------------------------------------
+      reveal(hud.eyebrow, smoothstep(0.13, 0.2, l))
+      reveal(hud.title, smoothstep(0.15, 0.24, l), 22)
+      reveal(hud.body, smoothstep(0.19, 0.27, l))
+      reveal(hud.cta, smoothstep(0.22, 0.3, l))
+      reveal(hud.links, smoothstep(0.25, 0.33, l), 8)
+      reveal(hud.foot, smoothstep(0.27, 0.35, l), 8)
+
+      const co = smoothstep(0.27, 0.36, l)
+      const k = scrambleAt('HARK_MARK', segment(l, 0.27, 0.34))
+      const v = scrambleAt(`${count.toLocaleString('en-US')} PTS · LOCKED`, segment(l, 0.29, 0.4))
+      if (hud.teleK.textContent !== k) hud.teleK.textContent = k
+      if (hud.teleV.textContent !== v) hud.teleV.textContent = v
+      const c = scrambleAt('39.9526 N · 75.1652 W', segment(l, 0.31, 0.44))
+      if (hud.teleC.textContent !== c) hud.teleC.textContent = c
+      // anchor: the top loop of the mark
+      tmp.set(0.25, 0.38, 0).applyMatrix4(mark.points.matrixWorld)
+      hud.callout.offset.x = portrait ? 34 : 96
+      hud.callout.offset.y = portrait ? -38 : -64
+      hud.callout.update(tmp, ctx.camera, frame.width, frame.height, co)
     },
-    camera(_local, _frame, out) {
-      out.position.set(0, 0, 6)
-      out.target.set(0, 0, 0)
-      out.fov = 45
-      out.parallax = 0.4
+
+    camera(l, frame, out: CameraPose) {
+      const { aspect, portrait } = layout(frame)
+      const settle = ease.outCubic(segment(l, 0, 0.3))
+      const hold = smoothstep(0.25, 1, l)
+
+      if (portrait) {
+        // mark in the upper half, copy below
+        const fov = 46
+        const dist = 9.4 / Math.max(0.62, Math.min(1, aspect / 0.46))
+        const z = lerp(dist + 7, dist, settle)
+        const az = lerp(-0.06, 0.06, hold) + Math.sin(frame.time * 0.1) * 0.01 * motion
+        out.position.set(Math.sin(az) * z, 0.65, Math.cos(az) * z)
+        out.target.set(0, -1.75, 0)
+        out.fov = lerp(78, fov, settle)
+      } else {
+        const fov = 34
+        const dist = 8.2
+        const z = lerp(dist + 8, dist, settle)
+        // frame the mark right of centre; copy lives on the left
+        const halfW = Math.tan((fov * Math.PI) / 360) * dist * aspect
+        const ox = -halfW * 0.4
+        const az = lerp(-0.08, 0.08, hold) + Math.sin(frame.time * 0.1) * 0.012 * motion
+        out.position.set(ox + Math.sin(az) * z, 0.95, Math.cos(az) * z)
+        out.target.set(ox, 0.05, 0)
+        out.fov = lerp(74, fov, settle)
+      }
+      out.roll = (1 - settle) * 0.09
+      out.parallax = 0.28 * settle
+    },
+
+    onPointerDown(frame, ctx) {
+      if (!mark) return
+      pointerSeen = true
+      lastMove = frame.time
+      lastRaw.copy(frame.pointerRaw)
+      if (!projectPointer(frame.pointerRaw, ctx.camera) || pointerLocal.length() > 1.1) return
+      pulseOrigin.copy(pointerLocal)
+      pulseAt = frame.time
     },
   }
 }

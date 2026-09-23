@@ -1,0 +1,255 @@
+/* Voices / Transmissions — every selector scoped under .stage-voices. */
+
+.stage-voices {
+  --vx-quote: clamp(21px, 2.3vw, 37px);
+}
+
+/* ---------- persistent header: eyebrow + receive meter ---------- */
+
+.stage-voices .vx-head {
+  position: absolute;
+  top: var(--safe-top);
+  left: var(--gutter);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.stage-voices .vx-head .hud-eyebrow {
+  margin: 0;
+}
+.stage-voices .vx-meter-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.stage-voices .vx-meter {
+  display: flex;
+  gap: 4px;
+}
+.stage-voices .vx-meter i {
+  display: block;
+  width: 16px;
+  height: 2px;
+  background: var(--line-strong);
+  transition:
+    background 0.3s ease,
+    box-shadow 0.3s ease;
+}
+.stage-voices .vx-meter i.is-done {
+  background: rgba(242, 246, 244, 0.6);
+}
+.stage-voices .vx-meter i.is-on {
+  background: var(--signal);
+  box-shadow: 0 0 8px rgba(0, 255, 133, 0.8);
+}
+.stage-voices .vx-status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: pre;
+}
+
+/* ---------- the deck: one transmission visible at a time ---------- */
+
+.stage-voices .vx-deck {
+  position: absolute;
+  left: var(--gutter);
+  right: var(--gutter);
+  top: var(--safe-top);
+  bottom: var(--safe-bottom);
+  display: grid;
+  align-items: center;
+  pointer-events: none;
+}
+.stage-voices .vx-tx {
+  grid-area: 1 / 1;
+  align-self: center;
+  width: min(820px, 60vw);
+  margin: 0 0 0 clamp(0px, 4vw, 72px);
+  visibility: hidden;
+}
+.stage-voices .vx-meta {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 14px;
+  row-gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  white-space: pre;
+  line-height: 1.5;
+}
+.stage-voices .vx-inc {
+  color: var(--signal);
+}
+.stage-voices .vx-inc::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 10px 1px 0;
+  border-radius: 50%;
+  background: var(--signal);
+  box-shadow: 0 0 10px var(--signal);
+  vertical-align: middle;
+}
+.stage-voices .vx-src {
+  color: var(--paper);
+}
+.stage-voices .vx-tel {
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--faint);
+  white-space: pre;
+  font-variant-numeric: tabular-nums;
+}
+.stage-voices .vx-rule {
+  height: 1px;
+  margin: 18px 0 0;
+  width: min(100%, 420px);
+  background: linear-gradient(90deg, rgba(0, 255, 133, 0.55), rgba(242, 246, 244, 0.12) 40%, transparent);
+  transform-origin: left center;
+}
+
+.stage-voices .vx-quote {
+  position: relative;
+  margin: 26px 0 26px;
+  padding: 0;
+}
+.stage-voices .vx-mark {
+  display: block;
+  height: 0.42em;
+  margin: 0 0 0 -0.04em;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: calc(var(--vx-quote) * 2.6);
+  line-height: 0.78;
+  color: var(--signal);
+  text-shadow: 0 0 30px rgba(0, 255, 133, 0.45);
+}
+.stage-voices .vx-quote p {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-weight: 330;
+  font-size: var(--vx-quote);
+  line-height: 1.26;
+  letter-spacing: -0.018em;
+  color: var(--paper);
+  text-wrap: pretty;
+  text-shadow:
+    0 1px 18px rgba(2, 3, 4, 0.9),
+    0 0 2px rgba(2, 3, 4, 0.6);
+}
+.stage-voices .vx-w {
+  position: relative;
+  display: inline-block;
+}
+.stage-voices .vx-w-r {
+  transition: opacity 0.28s ease;
+}
+.stage-voices .vx-w[data-s='0'] .vx-w-r,
+.stage-voices .vx-w[data-s='1'] .vx-w-r {
+  opacity: 0;
+  transition: none;
+}
+.stage-voices .vx-w-n {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 0.66em;
+  letter-spacing: 0.04em;
+  color: var(--signal);
+  white-space: pre;
+  opacity: 0;
+  text-shadow: 0 0 12px rgba(0, 255, 133, 0.7);
+}
+.stage-voices .vx-w[data-s='1'] .vx-w-n {
+  opacity: 0.95;
+}
+
+.stage-voices .vx-by {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0;
+}
+.stage-voices .vx-by::before {
+  content: '';
+  align-self: center;
+  width: 28px;
+  height: 1px;
+  background: var(--signal);
+}
+.stage-voices .vx-name {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.005em;
+  color: var(--paper);
+  font-style: normal;
+}
+.stage-voices .vx-co {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* star label */
+.stage-voices .vx-sub {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+
+/* ---------- portrait / phones: signal up top, transmission along the bottom ---------- */
+
+@media (max-width: 760px), (max-aspect-ratio: 1/1) {
+  .stage-voices {
+    --vx-quote: clamp(18px, 5vw, 26px);
+  }
+  .stage-voices .vx-deck {
+    top: 38%;
+    align-items: end;
+  }
+  .stage-voices .vx-tx {
+    width: auto;
+    margin: 0;
+    align-self: end;
+  }
+  .stage-voices .vx-meta {
+    flex-direction: column;
+    font-size: 10px;
+    letter-spacing: 0.16em;
+  }
+  .stage-voices .vx-tel {
+    font-size: 9.5px;
+    letter-spacing: 0.12em;
+  }
+  .stage-voices .vx-rule {
+    margin-top: 14px;
+  }
+  .stage-voices .vx-quote {
+    margin: 18px 0 18px;
+  }
+  .stage-voices .vx-quote p {
+    line-height: 1.3;
+    letter-spacing: -0.012em;
+  }
+  .stage-voices .vx-name {
+    font-size: 14px;
+  }
+}

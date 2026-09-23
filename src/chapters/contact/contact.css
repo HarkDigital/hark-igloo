@@ -1,0 +1,198 @@
+/* ---------------- Arrival (contact) ---------------- */
+
+.stage-contact .ct-wrap {
+  position: absolute;
+  left: var(--gutter);
+  top: var(--safe-top);
+  bottom: calc(var(--safe-bottom) + 56px);
+  width: min(600px, 46vw);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+}
+
+.stage-contact .ct-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.stage-contact .ct-eyebrow {
+  margin: 0 0 22px;
+}
+
+.stage-contact .ct-title {
+  font-size: clamp(3.2rem, 8.4vw, 8.6rem);
+  line-height: 0.86;
+  margin: 0 0 28px;
+}
+.stage-contact .ct-line {
+  display: block;
+}
+.stage-contact .ct-dot {
+  color: var(--signal);
+  text-shadow:
+    0 0 24px rgba(0, 255, 133, 0.65),
+    0 2px 24px rgba(2, 3, 4, 0.9);
+}
+
+.stage-contact .ct-body {
+  max-width: 40ch;
+  margin: 0 0 30px;
+}
+
+.stage-contact .ct-btn {
+  font-size: 12px;
+  padding: 15px 24px;
+  letter-spacing: 0.12em;
+  text-transform: none;
+}
+.stage-contact .ct-btn-arrow {
+  display: inline-block;
+  transition: transform 0.25s ease;
+}
+.stage-contact .ct-btn:hover .ct-btn-arrow,
+.stage-contact .ct-btn:focus-visible .ct-btn-arrow {
+  transform: translateX(4px);
+}
+
+/* bottom row: links (igloo's "Medium | LinkedIn | X") + footer */
+.stage-contact .ct-bottom {
+  position: absolute;
+  left: var(--gutter);
+  right: var(--gutter);
+  bottom: var(--safe-bottom);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 24px;
+  pointer-events: none;
+}
+.stage-contact .ct-links {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.stage-contact .ct-link {
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 6px 0;
+  margin: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--paper);
+  text-decoration: none;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s ease;
+}
+.stage-contact .ct-link::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  height: 1px;
+  background: var(--signal);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.3s ease;
+}
+.stage-contact .ct-link:hover,
+.stage-contact .ct-link:focus-visible {
+  color: var(--signal);
+  outline: none;
+}
+.stage-contact .ct-link:hover::after,
+.stage-contact .ct-link:focus-visible::after {
+  transform: scaleX(1);
+}
+.stage-contact .ct-ext {
+  color: var(--signal);
+}
+.stage-contact .ct-sep {
+  color: var(--faint);
+}
+.stage-contact .ct-foot {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  text-align: right;
+  padding-bottom: 6px;
+}
+
+.stage-contact .ct-callout .callout-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.stage-contact .ct-co-k {
+  color: var(--signal);
+  font-size: 10px;
+  white-space: pre;
+}
+.stage-contact .ct-co-v {
+  color: var(--paper);
+  white-space: pre;
+}
+.stage-contact .ct-co-c {
+  color: var(--faint);
+  font-size: 10px;
+  white-space: pre;
+}
+
+/* ---------------- phones / portrait ---------------- */
+@media (max-width: 767px), (max-aspect-ratio: 9/10) {
+  .stage-contact .ct-wrap {
+    top: auto;
+    bottom: calc(var(--safe-bottom) + 58px);
+    right: var(--gutter);
+    width: auto;
+    display: block;
+  }
+  .stage-contact .ct-eyebrow {
+    margin-bottom: 12px;
+  }
+  .stage-contact .ct-title {
+    font-size: clamp(2.5rem, 11.6vw, 4.2rem);
+    margin-bottom: 14px;
+    line-height: 0.92;
+  }
+  .stage-contact .ct-line {
+    display: inline;
+  }
+  .stage-contact .ct-body {
+    font-size: 13.5px;
+    line-height: 1.55;
+    margin-bottom: 18px;
+  }
+  .stage-contact .ct-btn {
+    padding: 13px 20px;
+    font-size: 11.5px;
+  }
+  .stage-contact .ct-bottom {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .stage-contact .ct-links {
+    gap: 10px;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+  }
+  .stage-contact .ct-foot {
+    text-align: left;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    padding-bottom: 0;
+  }
+}

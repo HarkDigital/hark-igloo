@@ -1,0 +1,314 @@
+/* WORK · Artifacts — every selector scoped under .stage-work */
+
+.stage-work .wk-card {
+  position: absolute;
+  top: var(--safe-top);
+  bottom: var(--safe-bottom);
+  width: min(420px, 33vw);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  visibility: hidden;
+}
+.stage-work .wk-card.is-left {
+  left: var(--gutter);
+}
+.stage-work .wk-card.is-right {
+  right: var(--gutter);
+}
+.stage-work .wk-card > * {
+  will-change: transform, opacity;
+}
+
+.stage-work .wk-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--signal);
+  white-space: pre;
+}
+.stage-work .wk-code {
+  min-width: 11.5ch;
+  text-shadow: 0 0 14px rgba(0, 255, 133, 0.45);
+}
+.stage-work .wk-line {
+  flex: 0 0 36px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--signal), rgba(0, 255, 133, 0));
+}
+.stage-work .wk-count {
+  color: var(--faint);
+  font-weight: 500;
+}
+.stage-work .wk-ticks {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: 2px;
+}
+.stage-work .wk-ticks i {
+  display: block;
+  width: 10px;
+  height: 2px;
+  background: var(--line-strong);
+}
+.stage-work .wk-ticks i.on {
+  background: var(--signal);
+  box-shadow: 0 0 8px rgba(0, 255, 133, 0.8);
+}
+
+.stage-work .wk-name {
+  --chars: 10;
+  margin: 18px 0 14px;
+  font-size: min(clamp(2rem, 3.3vw, 3.4rem), calc(min(420px, 33vw) / (var(--chars) * 1.12)));
+  overflow-wrap: break-word;
+  min-height: 1.9em;
+  display: flex;
+  align-items: flex-end;
+}
+.stage-work .wk-name-vis {
+  white-space: pre-wrap;
+}
+
+.stage-work .wk-ind {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: rgba(242, 246, 244, 0.7);
+}
+.stage-work .wk-ind::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border: 1px solid var(--signal);
+  transform: rotate(45deg);
+  box-shadow: 0 0 8px rgba(0, 255, 133, 0.6);
+}
+
+.stage-work .wk-blurb {
+  margin: 20px 0 20px;
+  max-width: 36ch;
+}
+.stage-work .wk-tags {
+  margin-bottom: 26px;
+}
+.stage-work .wk-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.stage-work .wk-arrow {
+  display: inline-block;
+  transition: transform 0.25s ease;
+}
+.stage-work .wk-visit:hover .wk-arrow,
+.stage-work .wk-visit:focus-visible .wk-arrow {
+  transform: translate(2px, -2px);
+}
+.stage-work .wk-tele {
+  display: none;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  color: var(--faint);
+  text-transform: uppercase;
+}
+
+/* ---- telemetry probes (build on the shared .callout look) */
+.stage-work .wk-probe .callout-label {
+  font-size: 10.5px;
+  line-height: 1.45;
+  letter-spacing: 0.14em;
+  white-space: pre;
+}
+.stage-work .wk-probe .wk-pl1 {
+  display: block;
+}
+.stage-work .wk-probe .wk-pl2 {
+  display: block;
+  color: var(--signal);
+  font-size: 9.5px;
+  opacity: 0.85;
+}
+.stage-work .wk-probe .callout-svg path {
+  stroke: rgba(242, 246, 244, 0.55);
+}
+
+/* ---- the nine */
+.stage-work .wk-mini .callout-label {
+  white-space: nowrap;
+}
+.stage-work .wk-mini-link {
+  color: var(--paper);
+  text-decoration: none;
+  pointer-events: auto;
+  transition: color 0.2s ease;
+}
+.stage-work .wk-mini-link:hover,
+.stage-work .wk-mini-link:focus-visible {
+  color: var(--signal);
+  outline: none;
+}
+.stage-work .wk-mini-link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.stage-work .wk-num {
+  color: var(--signal);
+  margin-right: 10px;
+}
+.stage-work .wk-mini .wk-pl2 {
+  color: var(--faint);
+  font-size: 9.5px;
+}
+.stage-work .wk-mini-num .callout-label {
+  font-size: 10px;
+  color: var(--signal);
+}
+
+/* ---- finale card */
+.stage-work .wk-fin {
+  position: absolute;
+  left: var(--gutter);
+  bottom: calc(var(--safe-bottom) + 4px);
+  width: min(420px, 31vw);
+  visibility: hidden;
+}
+.stage-work .wk-fin > * {
+  will-change: transform, opacity;
+}
+.stage-work .wk-fin-title {
+  white-space: pre-line;
+  margin: 16px 0 14px;
+  font-size: clamp(1.9rem, 2.7vw, 2.6rem);
+}
+.stage-work .wk-fin-body {
+  margin: 0 0 24px;
+}
+.stage-work .wk-list {
+  display: none;
+}
+
+/* ---- intro stamp */
+.stage-work .wk-intro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 34vh;
+  pointer-events: none;
+}
+.stage-work .wk-intro-text {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.42em;
+  color: var(--paper);
+  white-space: pre;
+  text-shadow: 0 0 18px rgba(0, 255, 133, 0.6);
+}
+
+.stage-work .wk-scrim {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 66%;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(2, 3, 4, 0) 0%, rgba(2, 3, 4, 0.72) 42%, rgba(2, 3, 4, 0.92) 100%);
+  opacity: 0;
+}
+
+/* ---- portrait / narrow: the HUD becomes a compact bottom sheet */
+@media (max-width: 759px), (max-aspect-ratio: 1/1) {
+  .stage-work .wk-card {
+    top: auto;
+    bottom: calc(var(--safe-bottom) - 6px);
+    left: var(--gutter);
+    right: var(--gutter);
+    width: auto;
+    display: block;
+  }
+  .stage-work .wk-meta {
+    font-size: 10px;
+    gap: 10px;
+  }
+  .stage-work .wk-line {
+    flex-basis: 20px;
+  }
+  .stage-work .wk-name {
+    margin: 10px 0 8px;
+    font-size: min(clamp(1.55rem, 7vw, 2.4rem), calc((100vw - 2 * var(--gutter)) / (var(--chars) * 1.12)));
+    min-height: 0;
+  }
+  .stage-work .wk-blurb {
+    margin: 10px 0 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    max-width: 44ch;
+  }
+  .stage-work .wk-tags {
+    margin-bottom: 14px;
+  }
+  .stage-work .wk-visit {
+    padding: 11px 18px;
+  }
+  .stage-work .wk-tele {
+    display: block;
+    flex: 1 1 100%;
+  }
+  .stage-work .wk-fin {
+    left: var(--gutter);
+    right: var(--gutter);
+    width: auto;
+    bottom: calc(var(--safe-bottom) - 6px);
+  }
+  .stage-work .wk-fin-title {
+    margin: 10px 0 8px;
+    font-size: clamp(1.6rem, 7.4vw, 2.4rem);
+  }
+  .stage-work .wk-fin-body {
+    font-size: 14px;
+    margin-bottom: 14px;
+  }
+  .stage-work .wk-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 14px;
+    margin: 0 0 16px;
+    padding: 0;
+    list-style: none;
+  }
+  .stage-work .wk-list li {
+    min-width: 0;
+  }
+  .stage-work .wk-list a {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--paper);
+    text-decoration: none;
+    line-height: 1.35;
+    padding: 2px 0 2px 2.6em;
+    text-indent: -2.6em;
+  }
+  .stage-work .wk-list .wk-num {
+    display: inline-block;
+    width: 2.6em;
+    margin-right: 0;
+    text-indent: 0;
+  }
+  .stage-work .wk-intro-text {
+    font-size: 10px;
+    letter-spacing: 0.3em;
+  }
+}

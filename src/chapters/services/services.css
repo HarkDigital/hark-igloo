@@ -1,0 +1,280 @@
+/* Orbit (services) chapter — scoped under .stage-services */
+
+.stage-services {
+  --svc-panel-w: min(480px, 36vw);
+}
+
+/* ---------------- intro ---------------- */
+.stage-services .svc-intro {
+  position: absolute;
+  left: var(--gutter);
+  bottom: var(--safe-bottom);
+  width: min(560px, 44vw);
+}
+.stage-services .svc-intro-title {
+  font-size: clamp(2.6rem, 4.6vw, 4.6rem);
+  margin: 14px 0 16px;
+}
+.stage-services .svc-intro-body {
+  max-width: 44ch;
+}
+.stage-services .svc-intro-meta {
+  margin: 18px 0 0;
+  color: var(--faint);
+}
+
+/* ---------------- service panel ---------------- */
+.stage-services .svc-panel {
+  position: absolute;
+  left: var(--gutter);
+  bottom: var(--safe-bottom);
+  width: var(--svc-panel-w);
+  padding: 20px 24px 22px;
+  background: linear-gradient(180deg, rgba(6, 10, 11, 0.74), rgba(3, 5, 6, 0.6));
+}
+.stage-services .svc-meter {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 1px;
+  overflow: hidden;
+}
+.stage-services .svc-meter-fill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(0, 255, 133, 0.1), var(--signal));
+  box-shadow: 0 0 10px rgba(0, 255, 133, 0.6);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+}
+.stage-services .svc-stack {
+  display: grid;
+}
+.stage-services .svc-item {
+  grid-area: 1 / 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.stage-services .svc-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.stage-services .svc-id {
+  color: var(--signal);
+  font-weight: 600;
+  white-space: pre;
+}
+.stage-services .svc-of {
+  color: var(--faint);
+}
+.stage-services .svc-title {
+  font-size: clamp(1.45rem, 2.15vw, 2.2rem);
+  line-height: 1;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+.stage-services .svc-rule {
+  margin: 16px 0 14px;
+}
+.stage-services .svc-blurb {
+  max-width: none;
+  font-size: clamp(13.5px, 1.05vw, 15.5px);
+  line-height: 1.6;
+}
+.stage-services .svc-tags {
+  margin-top: auto;
+  padding-top: 16px;
+}
+.stage-services .svc-tags .hud-tag {
+  font-size: 9.5px;
+  padding: 4px 9px;
+}
+
+/* ---------------- index rail ---------------- */
+.stage-services .svc-rail {
+  position: absolute;
+  right: var(--gutter);
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+.stage-services .svc-rail-item {
+  appearance: none;
+  background: none;
+  border: 0;
+  margin: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0 5px 12px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(242, 246, 244, 0.3);
+  transition: color 0.35s ease;
+}
+.stage-services .svc-rail-t {
+  opacity: 0.75;
+  transition: opacity 0.35s ease;
+}
+.stage-services .svc-rail-n {
+  width: 2.2ch;
+  text-align: right;
+}
+.stage-services .svc-rail-bar {
+  width: 8px;
+  height: 1px;
+  background: currentColor;
+  transition:
+    width 0.45s cubic-bezier(0.2, 0.7, 0.2, 1),
+    background 0.35s ease,
+    box-shadow 0.35s ease;
+}
+.stage-services .svc-rail-item:hover,
+.stage-services .svc-rail-item:focus-visible {
+  color: rgba(242, 246, 244, 0.75);
+  outline: none;
+}
+.stage-services .svc-rail-item:focus-visible .svc-rail-n {
+  outline: 1px solid var(--signal);
+  outline-offset: 3px;
+}
+.stage-services .svc-rail-item.is-active {
+  color: var(--paper);
+}
+.stage-services .svc-rail-item.is-active .svc-rail-t {
+  opacity: 1;
+}
+.stage-services .svc-rail-item.is-active .svc-rail-n {
+  color: var(--signal);
+}
+.stage-services .svc-rail-item.is-active .svc-rail-bar {
+  width: 30px;
+  background: var(--signal);
+  box-shadow: var(--signal-glow);
+}
+
+/* ---------------- world labels + callout ---------------- */
+.stage-services .svc-labels {
+  position: absolute;
+  inset: 0;
+}
+.stage-services .svc-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: rgba(242, 246, 244, 0.55);
+  text-shadow: 0 1px 8px rgba(2, 3, 4, 1);
+  white-space: nowrap;
+}
+.stage-services .svc-label::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 1px;
+  margin-right: 5px;
+  vertical-align: middle;
+  background: rgba(242, 246, 244, 0.4);
+}
+.stage-services .svc-callout .callout-label {
+  line-height: 1.55;
+}
+.stage-services .svc-co-id {
+  color: var(--signal);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  white-space: pre;
+}
+.stage-services .svc-co-tel {
+  color: rgba(242, 246, 244, 0.62);
+  font-size: 10px;
+  white-space: pre;
+}
+
+/* ---------------- mobile: bottom sheet ---------------- */
+@media (max-width: 767px) {
+  .stage-services {
+    --svc-panel-w: auto;
+  }
+  .stage-services .svc-intro {
+    right: var(--gutter);
+    width: auto;
+  }
+  .stage-services .svc-intro-title {
+    font-size: clamp(2.6rem, 13vw, 3.6rem);
+    margin: 10px 0 12px;
+  }
+  .stage-services .svc-intro-body {
+    font-size: 14px;
+  }
+  .stage-services .svc-panel {
+    right: var(--gutter);
+    padding: 16px 16px 18px;
+  }
+  .stage-services .svc-item-head {
+    margin-bottom: 10px;
+    font-size: 10px;
+  }
+  .stage-services .svc-title {
+    font-size: clamp(1.3rem, 6.2vw, 1.6rem);
+  }
+  .stage-services .svc-rule {
+    margin: 12px 0 10px;
+  }
+  .stage-services .svc-blurb {
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+  .stage-services .svc-tags {
+    padding-top: 12px;
+  }
+  .stage-services .svc-rail {
+    right: auto;
+    left: var(--gutter);
+    top: calc(var(--safe-top) + 8px);
+    transform: none;
+    align-items: flex-start;
+  }
+  .stage-services .svc-rail-item {
+    flex-direction: row-reverse;
+    padding: 4px 12px 4px 0;
+    gap: 8px;
+  }
+  .stage-services .svc-rail-t {
+    display: none;
+  }
+  .stage-services .svc-rail-n {
+    text-align: left;
+  }
+  .stage-services .svc-rail-item.is-active .svc-rail-bar {
+    width: 18px;
+  }
+  .stage-services .svc-co-tel--2 {
+    display: none;
+  }
+}
+
+@media (max-height: 700px) and (min-width: 768px) {
+  .stage-services .svc-blurb {
+    font-size: 13px;
+  }
+  .stage-services .svc-intro-title {
+    font-size: clamp(2.6rem, 5.5vw, 5rem);
+  }
+}

@@ -37,48 +37,87 @@ const FinalShader = {
     uniform vec2 uResolution;
     varying vec2 vUv;
 
-    float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    // sin-free hash: stable on mobile GPUs at large inputs
+    float hash(vec2 p) {
+      vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+      p3 += dot(p3, p3.yzx + 33.33);
+      return fract((p3.x + p3.y) * p3.z);
+    }
+
+    // one chromatic sample: radial aberration + horizontal RGB split
+    vec3 chroma(vec2 uv, vec2 ca, float split) {
+      return vec3(
+        texture2D(tDiffuse, uv + ca + vec2(split, 0.0)).r,
+        texture2D(tDiffuse, uv).g,
+        texture2D(tDiffuse, uv - ca - vec2(split, 0.0)).b
+      );
+    }
 
     void main() {
       vec2 uv = vUv;
       float t = uTransition;
       float g = clamp(max(t, uGlitch), 0.0, 1.0);
+      // glitch patterns step at 24 fps, like dropped frames
+      float ft = floor(uTime * 24.0);
 
-      // blocky horizontal slice tearing
-      float rows = mix(18.0, 64.0, hash(vec2(floor(uTime * 9.0), 3.1)));
+      // horizontal slice tear: a growing share of bands jump sideways
+      float rows = mix(14.0, 52.0, hash(vec2(floor(uTime * 8.0), 3.1)));
       float slice = floor(uv.y * rows);
-      float r = hash(vec2(slice, floor(uTime * 24.0)));
-      uv.x += (r - 0.5) * 0.16 * g * step(1.0 - 0.45 * g, r);
+      float r = hash(vec2(slice, ft));
+      float torn = step(1.0 - 0.5 * g, r);
+      float tear = (hash(vec2(slice, ft + 17.0)) - 0.5) * 0.15 * g * torn;
+      uv.x += tear;
 
-      // radial zoom toward center as we punch through a cut
-      vec2 c = uv - 0.5;
-      uv = 0.5 + c * (1.0 - 0.06 * t);
+      // coarse block displacement only near the peak of a cut
+      vec2 blk = floor(vUv * vec2(10.0, 6.0));
+      float bOn = step(1.0 - 0.16 * g * g, hash(blk + ft * 1.37));
+      uv += bOn * (vec2(hash(blk + 4.1), hash(blk + 9.7)) - 0.5) * vec2(0.09, 0.025);
 
-      float ca = uAberration * (0.35 + dot(c, c) * 3.0) + 0.018 * g;
-      vec2 dir = normalize(c + 1e-5) * ca;
+      // punch-in zoom as we go through the cut
+      vec2 c = vUv - 0.5;
+      uv = 0.5 + (uv - 0.5) * (1.0 - 0.07 * t * t);
+
+      vec2 ca = normalize(c + 1e-5) * uAberration * (0.2 + dot(c, c) * 1.8);
+      float split = 0.011 * g + abs(tear) * 0.45;
+
       vec3 col;
-      col.r = texture2D(tDiffuse, uv + dir).r;
-      col.g = texture2D(tDiffuse, uv).g;
-      col.b = texture2D(tDiffuse, uv - dir).b;
-
       if (t > 0.01) {
-        vec3 acc = col;
-        for (int i = 1; i < 7; i++) {
-          float s = 1.0 - float(i) * 0.025 * t;
-          acc += texture2D(tDiffuse, 0.5 + (uv - 0.5) * s).rgb;
+        // radial zoom blur, dithered per pixel so the steps never band
+        float j = hash(gl_FragCoord.xy + fract(uTime * 3.7) * 61.0);
+        vec3 acc = vec3(0.0);
+        float wsum = 0.0;
+        for (int i = 0; i < 8; i++) {
+          float fi = (float(i) + j) / 8.0;
+          float w = 1.0 - fi * 0.55;
+          acc += chroma(0.5 + (uv - 0.5) * (1.0 - fi * 0.17 * t), ca, split) * w;
+          wsum += w;
         }
-        col = mix(col, acc / 7.0, t);
+        col = mix(chroma(uv, ca, split), acc / wsum, smoothstep(0.0, 0.6, t));
+      } else {
+        col = chroma(uv, ca, split);
       }
 
+      // a few thin signal-green interference lines while glitching
+      float line = step(0.994 - 0.02 * g, hash(vec2(floor(vUv.y * uResolution.y * 0.5), ft)));
+      col += vec3(0.25, 1.0, 0.6) * line * g * 0.22;
+
+      // chapter-driven flash + a brief white-hot / green-rim flash right at the cut
+      float peak = pow(t, 8.0);
+      float core = smoothstep(0.8, 0.0, length(c * vec2(1.5, 1.0)));
+      vec3 flashCol = mix(vec3(0.3, 1.0, 0.62), vec3(1.0), core);
       col += vec3(0.75, 1.0, 0.86) * uFlash;
-      col += vec3(0.6, 1.0, 0.8) * t * t * 0.55;
+      col += flashCol * peak * (0.25 + 0.5 * core);
+      col += vec3(0.3, 1.0, 0.6) * t * t * 0.07;
 
       float v = smoothstep(0.95, 0.25, length(c * vec2(1.0, 0.8)));
       col *= mix(1.0, v, uVignette);
 
+      // film grain, a touch stronger in the midtones than in the blacks
+      float lum = dot(col, vec3(0.299, 0.587, 0.114));
       float n = hash(vUv * uResolution + fract(uTime * 7.13) * 91.0) - 0.5;
-      col += n * uGrain;
-      col *= 0.97 + 0.03 * sin(vUv.y * uResolution.y * 1.2);
+      col += n * uGrain * (0.55 + 0.45 * smoothstep(0.0, 0.35, lum));
+      // barely-there scanlines that come up during glitches
+      col *= 1.0 - (0.018 + 0.06 * g) * (0.5 + 0.5 * sin(vUv.y * uResolution.y * 1.3));
 
       col = mix(col, vec3(0.0), uFade);
       gl_FragColor = vec4(col, 1.0);
