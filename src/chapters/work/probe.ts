@@ -48,6 +48,8 @@ export class Probe {
     pad = 16,
     avoid?: { left: number; top: number; right: number; bottom: number } | null,
   ) {
+    // degenerate projections (first frames) would write NaN into the SVG path
+    if (!Number.isFinite(x) || !Number.isFinite(y)) vis = 0
     reveal(this.root, vis, 0)
     if (vis <= 0.002) return
     if (!this.width) {

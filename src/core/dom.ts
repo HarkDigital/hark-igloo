@@ -71,9 +71,11 @@ export class Callout {
     const behind = _v.z > 1
     const x = (_v.x * 0.5 + 0.5) * w
     const y = (-_v.y * 0.5 + 0.5) * h
-    const vis = behind ? 0 : visibility
+    // before the first real frame the camera matrices can be degenerate
+    const valid = Number.isFinite(x) && Number.isFinite(y)
+    const vis = behind || !valid ? 0 : visibility
     reveal(this.root, vis, 0)
-    if (vis <= 0) return !behind
+    if (vis <= 0) return !behind && valid
     const lw = this.label.offsetWidth
     // flip to the other side rather than run off the edge of the screen
     const margin = 12
