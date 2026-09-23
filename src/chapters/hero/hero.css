@@ -26,10 +26,37 @@
   position: absolute;
   top: var(--safe-top);
   right: var(--gutter);
-  width: min(340px, 30vw);
+  /* 24.2em of 11.5px mono + rule/padding: breaks after "MEDIA." and keeps MOM-AND-POP whole */
+  width: min(294px, 30vw);
+}
+.stage-hero .hero-manifesto__inner {
+  position: relative;
+  isolation: isolate;
+}
+/* soft falloff so the copy never fights the starfield / network behind it */
+.stage-hero .hero-manifesto__inner::before {
+  content: '';
+  position: absolute;
+  inset: -56px -64px -64px -80px;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgba(2, 3, 4, 0.62), rgba(2, 3, 4, 0.3) 62%, rgba(2, 3, 4, 0));
 }
 .stage-hero .hero-manifesto .hud-eyebrow {
   margin: 0 0 14px;
+}
+/* the visible copy decodes over an invisible sizer so the block never reflows */
+.stage-hero .hero-manifesto__box {
+  display: grid;
+  width: min(24.2em, 100%);
+}
+.stage-hero .hero-manifesto__sizer,
+.stage-hero .hero-manifesto__live {
+  grid-area: 1 / 1;
+  white-space: pre-wrap;
+}
+.stage-hero .hero-manifesto__sizer {
+  visibility: hidden;
 }
 .stage-hero .hero-manifesto__text {
   margin: 0;
@@ -134,6 +161,13 @@
 
 /* ---------- callouts ---------- */
 .stage-hero .hero-co .callout-label {
+  /* a quiet plate so labels stay legible over the horizon glow and debris */
+  margin-top: -7px;
+  padding: 7px 11px 7px 9px;
+  background: rgba(2, 3, 4, 0.48);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border-radius: 2px;
   display: grid;
   grid-template-columns: auto auto;
   column-gap: 10px;
@@ -179,7 +213,8 @@
   margin: 0 0 22px;
 }
 .stage-hero .hero-title {
-  font-size: clamp(3rem, 6.7vw, 7rem);
+  /* capped by height too so 16:9 laptops keep clear air between headline and mark */
+  font-size: clamp(3rem, min(6.7vw, 10.6vh), 7rem);
   line-height: 0.86;
   letter-spacing: -0.03em;
 }

@@ -22,9 +22,9 @@ export const STAR_R = 0.42
 /** Scroll timeline (chapter-local 0..1). */
 export const TL = {
   /** camera has emerged from the logo core */
-  emergeEnd: 0.07,
+  emergeEnd: 0.08,
   /** establishing shot starts travelling to the first world */
-  holdEnd: 0.095,
+  holdEnd: 0.1,
   /** first service slot starts */
   s0: 0.13,
   /** last service slot ends; exit beat begins */
@@ -221,6 +221,8 @@ export function blendPose(A: Pose, B: Pose, t: number, bump: number, out: Pose) 
   const tr = lerp(cA.r, cB.r, t)
   const ta = angLerp(cA.a, cB.a, t)
   out.target.set(Math.cos(ta) * tr, lerp(cA.y, cB.y, t) - arc * bump * 0.35, Math.sin(ta) * tr)
+  // mid-flight the gaze drifts back toward the star so the system reads in transit
+  out.target.multiplyScalar(1 - arc * 0.24)
   out.fov = lerp(A.fov, B.fov, t) + arc * bump * 2.5
   out.roll = lerp(A.roll, B.roll, t)
   return out
@@ -230,10 +232,11 @@ export function blendPose(A: Pose, B: Pose, t: number, bump: number, out: Pose) 
 export function establishPose(local: number, view: View, azimuth: number, out: Pose) {
   const portrait = view.portrait
   const az = azimuth + (local - TL.emergeEnd) * 0.9
-  const rho = portrait ? 33 : 21.5
-  const y = portrait ? 19 : 10.2
+  // portrait looks down steeper so the rings stack tall and fill the screen
+  const rho = portrait ? 28.5 : 21.5
+  const y = portrait ? 25 : 10.2
   out.pos.set(Math.cos(az) * rho, y, Math.sin(az) * rho)
-  out.target.set(0, portrait ? -4.2 : -0.9, 0)
+  out.target.set(0, portrait ? -3.4 : -0.9, 0)
   out.fov = portrait ? 58 : 42
   out.roll = 0
   return out
@@ -242,8 +245,10 @@ export function establishPose(local: number, view: View, azimuth: number, out: P
 const _ed = new THREE.Vector3()
 /** Emerge from the glowing diamond of the logo core and pull back to the establishing shot. */
 export function emergePose(local: number, E: Pose, out: Pose) {
+  // log-distance pull-back: glare-filled at the cut, a whoosh through the
+  // inner system around 0.04, then an easy settle into the wide shot
   const s = segment(local, 0, TL.emergeEnd)
-  const e = ease.outCubic(s)
+  const e = ease.inOutQuad(s)
   _ed.copy(E.pos).sub(E.target)
   const dE = _ed.length()
   const elE = Math.asin(_ed.y / dE)

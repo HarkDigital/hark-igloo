@@ -4,6 +4,18 @@
   --vx-quote: clamp(21px, 2.3vw, 37px);
 }
 
+/* ---------- legibility scrim: darkens space behind the copy only ---------- */
+
+.stage-voices .vx-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse 34% 26% at 12% 12%, rgba(2, 3, 4, 0.55), rgba(2, 3, 4, 0) 100%),
+    radial-gradient(ellipse 46% 58% at 25% 52%, rgba(2, 3, 4, 0.66), rgba(2, 3, 4, 0.32) 55%, rgba(2, 3, 4, 0) 100%);
+}
+
 /* ---------- persistent header: eyebrow + receive meter ---------- */
 
 .stage-voices .vx-head {
@@ -13,9 +25,11 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  text-shadow: 0 1px 10px rgba(2, 3, 4, 0.95);
 }
 .stage-voices .vx-head .hud-eyebrow {
   margin: 0;
+  white-space: pre;
 }
 .stage-voices .vx-meter-row {
   display: flex;
@@ -208,6 +222,11 @@
 }
 
 /* star label */
+.stage-voices .vx-star .callout-label {
+  text-shadow:
+    0 1px 8px rgba(2, 3, 4, 1),
+    0 0 18px rgba(2, 3, 4, 0.9);
+}
 .stage-voices .vx-sub {
   display: block;
   color: var(--muted);
@@ -220,6 +239,11 @@
 @media (max-width: 760px), (max-aspect-ratio: 1/1) {
   .stage-voices {
     --vx-quote: clamp(18px, 5vw, 26px);
+  }
+  .stage-voices .vx-scrim {
+    background:
+      linear-gradient(to bottom, rgba(2, 3, 4, 0.62) 0%, rgba(2, 3, 4, 0.3) 16%, rgba(2, 3, 4, 0) 26%),
+      linear-gradient(to top, rgba(2, 3, 4, 0.86) 0%, rgba(2, 3, 4, 0.72) 38%, rgba(2, 3, 4, 0.3) 54%, rgba(2, 3, 4, 0) 64%);
   }
   .stage-voices .vx-deck {
     top: 38%;

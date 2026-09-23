@@ -99,7 +99,7 @@ export default function create(): Chapter {
 
   function discShot(t: number, frame: Frame, out: Shot) {
     const portrait = frame.width / frame.height < 0.9
-    const D = portrait ? 92 : 58
+    const D = portrait ? 128 : 58
     const phi = lerp(-0.28, 0.28, t)
     out.pos.set(Math.sin(phi) * D, D * 0.14, Math.cos(phi) * D)
     out.target.set(portrait ? 0 : -R * 0.2, 0, 0)

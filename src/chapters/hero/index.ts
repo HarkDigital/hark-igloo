@@ -39,14 +39,14 @@ type Prop = Exclude<keyof Key, 't'>
 
 // prettier-ignore
 const KEYS: Key[] = [
-  { t: 0.0,  az: -0.1,  el: 0.1,   dist: 8.4, tx: 0,     ty: -0.5,  px: 0, py: -0.35, fov: 34, roll: 0 },
-  { t: 0.08, az: -0.03, el: 0.09,  dist: 7.6, tx: 0,     ty: -0.38, px: 0, py: -0.3,  fov: 34, roll: 0 },
+  { t: 0.0,  az: -0.1,  el: 0.1,   dist: 8.4, tx: 0.3,   ty: -0.5,  px: 0, py: -0.35, fov: 34, roll: 0 },
+  { t: 0.08, az: -0.03, el: 0.09,  dist: 7.6, tx: 0.2,   ty: -0.38, px: 0, py: -0.3,  fov: 34, roll: 0 },
   { t: 0.22, az: 0.2,   el: 0.15,  dist: 6.2, tx: 0,     ty: -0.1,  px: 0, py: -0.05, fov: 35, roll: 0.02 },
   { t: 0.37, az: 0.36,  el: 0.1,   dist: 5.5, tx: 0,     ty: 0,     px: 0, py: 0,     fov: 35, roll: 0.012 },
   { t: 0.48, az: 0.42,  el: 0.05,  dist: 5.2, tx: 0,     ty: 0,     px: 0, py: 0,     fov: 34, roll: 0 },
   { t: 0.59, az: 0.12,  el: 0.0,   dist: 5.0, tx: 0,     ty: 0,     px: 0, py: 0,     fov: 33, roll: -0.01 },
-  { t: 0.69, az: -0.14, el: 0.05,  dist: 6.4, tx: -0.9,  ty: -0.25, px: 0, py: -0.6,  fov: 33, roll: 0 },
-  { t: 0.79, az: -0.22, el: 0.1,   dist: 7.4, tx: -1.78, ty: -0.5,  px: 0, py: -1.25, fov: 34, roll: 0 },
+  { t: 0.7,  az: -0.17, el: 0.08,  dist: 7.0, tx: -1.62, ty: -0.45, px: 0, py: -1.12, fov: 34, roll: 0 },
+  { t: 0.8,  az: -0.22, el: 0.1,   dist: 7.4, tx: -1.78, ty: -0.5,  px: 0, py: -1.25, fov: 34, roll: 0 },
   { t: 0.93, az: -0.18, el: 0.09,  dist: 7.0, tx: -1.72, ty: -0.48, px: 0, py: -1.2,  fov: 34, roll: 0 },
 ]
 
@@ -163,8 +163,10 @@ export default function create(): Chapter {
       const t = frame.time
       const motion = reduced ? 0.25 : 1
       const clock = now()
-      // safety: if the loader never signals, power on anyway
-      if (revealAt < 0 && clock - initAt > 8) {
+      // power on once the loader has handed over. The event listener is the fast path;
+      // polling the ready flag covers a reveal that fired before init, and a long
+      // safety net covers a loader that never signals at all.
+      if (revealAt < 0 && (document.documentElement.dataset.ready === '1' || clock - initAt > 20)) {
         revealAt = clock
         ui.playIntro(reduced)
       }
@@ -233,8 +235,8 @@ export default function create(): Chapter {
 
       // ---- DOM ----
       const landed = bricks.landed(local)
-      ui.update(local, landed, bricks.buildCount, segment(local, T.resolveA + 0.02, T.resolveB - 0.015))
-      ui.updateCallouts(local, ctx.camera, frame.width, frame.height, toWorld)
+      ui.update(local, landed, bricks.buildCount, segment(local, T.resolveA + 0.02, T.resolveB - 0.015), frame.dt, clock, reduced)
+      ui.updateCallouts(local, ctx.camera, frame.width, frame.height, toWorld, frame.dt, clock)
     },
 
     camera(local: number, frame: Frame, out: CameraPose) {
@@ -272,7 +274,7 @@ export default function create(): Chapter {
         const len = lerp(len0, 0.36, push)
         out.target.lerp(coreWorld, turn)
         out.position.copy(coreWorld).addScaledVector(d, len)
-        out.fov = lerp(fov, 72, push)
+        out.fov = lerp(fov, 60, push * push)
         out.roll = lerp(out.roll, -0.08, push)
         out.parallax = 0.42 * (1 - turn)
       }

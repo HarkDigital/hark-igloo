@@ -1,8 +1,8 @@
 import * as THREE from 'three'
 import type { CameraPose, Chapter, ChapterContext, Frame } from '../../core/types'
 import { Callout, el, reveal } from '../../core/dom'
-import { Scramble, scrambleAt } from '../../core/scramble'
-import { clamp, ease, lerp, rng, segment, smoothstep, window01 } from '../../core/math'
+import { Scramble } from '../../core/scramble'
+import { clamp, damp, ease, lerp, rng, segment, smoothstep, window01 } from '../../core/math'
 import { BRAND } from '../../content'
 import {
   GATE,
@@ -29,6 +29,33 @@ import './portal.css'
 
 const FLY = 0.13
 const KEYSTONES = [9, 0, 27, 18] // N, E, S, W (segment i sits at angle i·10°)
+
+/**
+ * Threshold-triggered decode: plays the time-based scramble ONCE when `on`
+ * flips true (or the text changes), clears when it flips false. Settles to the
+ * exact text within `duration` no matter where the scroll comes to rest.
+ */
+class Decode {
+  private s: Scramble
+  private on = false
+  private text = ''
+  constructor(node: HTMLElement) {
+    this.s = new Scramble(node, '')
+  }
+  set(text: string, on: boolean, duration = 0.6, delay = 0) {
+    if (on) {
+      if (!this.on || text !== this.text) {
+        this.on = true
+        this.text = text
+        this.s.play(text, { duration, delay })
+      }
+    } else if (this.on) {
+      this.on = false
+      this.text = ''
+      this.s.clear()
+    }
+  }
+}
 
 /** a soft 0→1→0 bump centred on c with half-width w */
 const bump = (v: number, c: number, w: number) => Math.exp(-(((v - c) / w) ** 2))
@@ -72,13 +99,14 @@ export default function create(): Chapter {
     pct: HTMLElement
     ticks: HTMLElement[]
     locked: HTMLElement
-    dest: HTMLElement
+    dest: Decode
     status: Scramble
     flux: HTMLElement
-    coord: HTMLElement
+    coord: Decode
     phase: string
     callout: Callout
-    calloutSub: HTMLElement
+    calloutState: Decode
+    calloutTemp: HTMLElement
     key: Callout
   }
 
@@ -93,6 +121,22 @@ export default function create(): Chapter {
   const coreWorld = new THREE.Vector3()
   const keyWorld = new THREE.Vector3()
   const segMats: THREE.Matrix4[] = []
+  // 0..1: is there room for each callout's label on screen? (damped, no popping)
+  let fitCore = 0
+  let fitKey = 0
+
+  /** True when a right-side callout's label lands fully inside the gutters and under the header. */
+  function room(c: Callout, anchor: THREE.Vector3, frame: Frame, cam: THREE.Camera) {
+    p.copy(anchor).project(cam)
+    if (p.z > 1) return 0
+    const x = (p.x * 0.5 + 0.5) * frame.width
+    const y = (-p.y * 0.5 + 0.5) * frame.height
+    const g = clamp(frame.width * 0.034, 16, 44)
+    const safeTop = clamp(frame.height * 0.11, 84, 118)
+    const right = x + c.offset.x + 8 + c.label.offsetWidth
+    const top = y + c.offset.y - 10
+    return right <= frame.width - g && top >= safeTop ? 1 : 0
+  }
 
   function buildHud(stage: HTMLElement) {
     const h = el('h2', 'sr-only', `Transit gate: aligning to ${BRAND.short}`, stage)
@@ -138,8 +182,11 @@ export default function create(): Chapter {
 
     const callout = new Callout(stage, { side: 'right', offset: { x: 150, y: -120 } })
     callout.root.setAttribute('aria-hidden', 'true')
-    callout.label.innerHTML = '<span class="gt-co-k">Core_01</span><span class="gt-co-v"></span>'
-    const calloutSub = callout.label.querySelector<HTMLElement>('.gt-co-v')!
+    callout.label.innerHTML =
+      '<span class="gt-co-k">Core_01</span>' +
+      '<span class="gt-co-v"><span class="gt-co-s"></span> · <span class="gt-co-t"></span> MK</span>'
+    const calloutState = callout.label.querySelector<HTMLElement>('.gt-co-s')!
+    const calloutTemp = callout.label.querySelector<HTMLElement>('.gt-co-t')!
 
     const key = new Callout(stage, { side: 'right', offset: { x: 70, y: -150 } })
     key.root.setAttribute('aria-hidden', 'true')
@@ -152,13 +199,14 @@ export default function create(): Chapter {
       pct,
       ticks: tks,
       locked,
-      dest,
+      dest: new Decode(dest),
       status: new Scramble(status, ''),
       flux,
-      coord,
+      coord: new Decode(coord),
       phase: '',
       callout,
-      calloutSub,
+      calloutState: new Decode(calloutState),
+      calloutTemp,
       key,
     })
   }
@@ -283,8 +331,8 @@ export default function create(): Chapter {
       if (t.classList.contains('on') !== on) t.classList.toggle('on', on)
     }
 
-    const dest = scrambleAt(BRAND.short.toUpperCase(), segment(l, 0.14, 0.34))
-    if (hud.dest.textContent !== dest) hud.dest.textContent = dest
+    // decodes fire once on threshold crossings and always settle to clean text
+    hud.dest.set(BRAND.short.toUpperCase(), l >= 0.15, 0.8)
 
     const phase =
       l < 0.075
@@ -309,30 +357,34 @@ export default function create(): Chapter {
     const jitter = (Math.sin(tick * 12.9898) * 43758.5453) % 1
     const fluxTxt = `${(flux + jitter * 0.04).toFixed(2)} TW`
     if (hud.flux.textContent !== fluxTxt) hud.flux.textContent = fluxTxt
-    const coord = scrambleAt('39.9526 N · 75.1652 W', segment(l, 0.2, 0.42))
-    if (hud.coord.textContent !== coord) hud.coord.textContent = coord
+    hud.coord.set('39.9526 N · 75.1652 W', l >= 0.2, 0.8, 0.15)
 
-    // callouts (desktop only — mobile keeps the frame clean)
+    // callouts (desktop only — mobile keeps the frame clean). On narrow or
+    // portrait windows the ring fills the width and there is no room outside
+    // it for a label, so each callout also checks it fits before showing.
     const cam = ctx.camera
     coreWorld.set(0, 0, 0).applyMatrix4(group.matrixWorld)
-    const cv = mobile ? 0 : window01(l, 0.16, 0.58, 0.04)
-    if (cv > 0 || hud.callout.root.style.opacity !== '0.000') {
-      const temp = (4.1 + l * 3 + ((tick % 7) * 0.013)).toFixed(3)
-      const sub = `${scrambleAt('Ignited', segment(l, 0.16, 0.24))} · ${temp} MK`
-      if (hud.calloutSub.textContent !== sub) hud.calloutSub.textContent = sub
+    const cWin = mobile ? 0 : window01(l, 0.16, 0.58, 0.04)
+    if (cWin > 0 || hud.callout.root.style.opacity !== '0.000') {
+      const temp = (4.1 + l * 3 + (tick % 7) * 0.013).toFixed(3)
+      if (hud.calloutTemp.textContent !== temp) hud.calloutTemp.textContent = temp
       // put the label just outside the ring's upper-right shoulder
       p.copy(coreWorld).project(cam)
       p2.set(GATE.R1, 0, 0).applyMatrix4(group.matrixWorld).project(cam)
       const ringPx = Math.abs(p2.x - p.x) * 0.5 * frame.width
       hud.callout.offset.x = ringPx * 0.98 + 24
       hud.callout.offset.y = -ringPx * 0.74
+      fitCore = damp(fitCore, room(hud.callout, coreWorld, frame, cam), 12, frame.dt)
+      const cv = cWin * smoothstep(0.5, 0.95, fitCore)
+      hud.calloutState.set('IGNITED', cv > 0.05, 0.5, 0.1)
       hud.callout.update(coreWorld, cam, frame.width, frame.height, cv)
     }
     ring.diamonds.getMatrixAt(1, m4)
     keyWorld.setFromMatrixPosition(m4).applyMatrix4(group.matrixWorld)
-    const kv = mobile ? 0 : window01(l, 0.6, 0.84, 0.04)
-    if (kv > 0 || hud.key.root.style.opacity !== '0.000') {
-      hud.key.update(keyWorld, cam, frame.width, frame.height, kv)
+    const kWin = mobile ? 0 : window01(l, 0.6, 0.84, 0.04)
+    if (kWin > 0 || hud.key.root.style.opacity !== '0.000') {
+      fitKey = damp(fitKey, room(hud.key, keyWorld, frame, cam), 12, frame.dt)
+      hud.key.update(keyWorld, cam, frame.width, frame.height, kWin * smoothstep(0.5, 0.95, fitKey))
     }
   }
 
@@ -464,10 +516,22 @@ export default function create(): Chapter {
 
     camera(l, frame, out: CameraPose) {
       const aspect = frame.width / Math.max(1, frame.height)
-      const portrait = aspect < 1
+      // matches the CSS breakpoint: stacked HUD (top/bottom) vs side panels
+      const portrait = frame.width < 768 || aspect < 0.8
       const baseFov = portrait ? 52 : 38
       const t = Math.tan((baseFov * Math.PI) / 360)
-      const D = (GATE.R1 + 0.1) / (t * (portrait ? 0.92 : 0.7) * Math.min(1, aspect))
+      const D = (GATE.R1 + 0.1) / (t * (portrait ? 0.92 * Math.min(1, aspect) : 0.7))
+      // side-panel layouts: never let the ring (keystones included) grow into
+      // the HUD columns, however close the camera pushes in
+      let minDist = 0
+      if (!portrait) {
+        const w = frame.width
+        const panel = w <= 1180 ? clamp(w * 0.19, 220, 280) : 285
+        const gutter = clamp(w * 0.034, 16, 44)
+        const maxRing = Math.max(120, w - 2 * (panel + gutter + 20))
+        const fMax = maxRing / Math.max(1, frame.height)
+        minDist = ((GATE.R1 + 0.1) * 1.09) / (t * fMax)
+      }
 
       const pIn = ease.outCubic(segment(l, 0, 0.12))
       const pDial = ease.inOutQuad(segment(l, 0.1, 0.62))
@@ -478,6 +542,7 @@ export default function create(): Chapter {
       let dist = lerp(D * 1.8, D * 1.3, pIn)
       dist = lerp(dist, D * 1.03, pDial)
       dist = lerp(dist, D * 0.84, pHor)
+      dist = Math.max(dist, minDist)
       let az = lerp(0.7, 0.55, pIn)
       az = lerp(az, 0.1, pDial)
       az = lerp(az, 0, pHor)

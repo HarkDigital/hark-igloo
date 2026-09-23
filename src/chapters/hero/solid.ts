@@ -154,7 +154,7 @@ export class Solid {
     this.material = new THREE.MeshPhysicalMaterial({
       color: 0x6f7980,
       metalness: 1,
-      roughness: 0.2,
+      roughness: 0.12,
       envMap,
       envMapIntensity: 1.25,
       clearcoat: 1,

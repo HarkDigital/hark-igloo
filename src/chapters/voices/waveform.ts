@@ -65,10 +65,11 @@ vec3 pos(float s, out float pk) {
   frameAt(u, T, N, B);
   float ca = cos(aLine.y), sa = sin(aLine.y);
   vec3 dir = N * ca + B * sa;
-  float grow = mix(2.1, 0.42, smoothstep(0.25, 1.0, u)) * smoothstep(0.0, 0.08, u);
+  float grow = mix(1.6, 0.42, smoothstep(0.25, 1.0, u)) * smoothstep(0.0, 0.08, u);
   pk = gauss((u - uPacket) / 0.03) * uPacketAmp;
   float y = carrier(u, aLine.x) * uAmp * grow * aLine.z;
-  y += sin(u * 560.0 - uTime * 16.0 + aLine.x) * pk * grow * 2.4 * aLine.z;
+  // the packet: a tight, bright burst of carrier riding down the line
+  y += sin(u * 420.0 - uTime * 16.0 + aLine.x) * pk * grow * 0.55 * aLine.z;
   return bez(u) + dir * y;
 }
 
@@ -87,7 +88,7 @@ void main() {
   vec2 d = sA - sZ;
   vec2 dir = length(d) > 1e-4 ? normalize(d) : vec2(1.0, 0.0);
   vec2 nrm = vec2(-dir.y, dir.x);
-  float w = uPx * (1.0 + pk * 0.8);
+  float w = uPx * (1.0 + pk * 0.6);
   cP.xy += nrm * aSide * w * 2.0 / uRes * max(cP.w, 0.05);
   vSide = aSide;
   vS = aS;
@@ -110,7 +111,7 @@ void main() {
   vec3 green = vec3(0.08, 1.0, 0.42);
   vec3 hot = vec3(0.8, 1.0, 0.88);
   float pk = clamp(vPk, 0.0, 1.0);
-  vec3 col = mix(green, hot, pk * core) * (core * (1.5 + pk * 4.0) + halo) * vBright * ends * uGlow;
+  vec3 col = mix(green, hot, pk * core) * (core * (1.5 + pk * 2.2) + halo) * vBright * ends * uGlow;
   gl_FragColor = vec4(col, 1.0);
 }
 `

@@ -49,8 +49,8 @@ varying vec2 vUv;
 void main() {
   float d = length(vUv - 0.5) * 2.0;
   float r = 0.86;
-  float ring = gauss((d - r) / 0.01) * 5.0 + gauss((d - r) / 0.07) * 0.45;
-  float inner = gauss((d - r * 0.72) / 0.005) * 1.6 * (1.0 - uT);
+  float ring = gauss((d - r) / 0.008) * 3.2 + gauss((d - r) / 0.035) * 0.22;
+  float inner = gauss((d - r * 0.72) / 0.004) * 1.2 * (1.0 - uT);
   float tick = step(0.5, fract(atan(vUv.y - 0.5, vUv.x - 0.5) / 6.28318 * 96.0)) * gauss((d - r * 1.08) / 0.006) * 1.2;
   vec3 col = mix(vec3(0.2, 1.0, 0.5), vec3(0.9, 1.0, 0.95), 0.35) * (ring + inner + tick);
   gl_FragColor = vec4(col * uIntensity, 1.0);
@@ -80,8 +80,10 @@ varying vec3 vW;
 void main() {
   vec3 V = normalize(uCamPos - vW);
   float facing = abs(dot(normalize(vN), V));
-  float body = pow(facing, 2.4);
-  float along = vUv.y;
+  float body = pow(clamp(facing, 0.0, 1.0), 2.4);
+  // clamp before pow: interpolation can overshoot 1.0 by an ulp and pow() of a
+  // negative is NaN, which the bloom chain smears across the whole frame
+  float along = clamp(vUv.y, 0.0, 1.0);
   float fall = pow(1.0 - along, 1.8) * smoothstep(0.0, 0.02, along);
   float stri = 0.7 + 0.3 * sin(vUv.x * 6.28318 * 7.0 + along * 30.0 - uTime * 1.5);
   vec3 col = vec3(0.3, 1.0, 0.62) * body * fall * stri * uIntensity;
@@ -158,7 +160,7 @@ export class Pulsar {
     b2.rotation.x = Math.PI
     b1.frustumCulled = b2.frustumCulled = false
     this.beams.add(b1, b2)
-    if (!location.search.includes('pb')) mag.add(this.beams) // TEMP
+    mag.add(this.beams)
 
     // dipole field lines r = L sin²θ
     const shells = mobile ? [3.2, 6.5] : [2.6, 4.8, 8.2]
@@ -198,7 +200,7 @@ export class Pulsar {
     })
     const field = new THREE.LineSegments(fg, this.fieldMat)
     field.frustumCulled = false
-    if (!location.search.includes('pf')) mag.add(field) // TEMP
+    mag.add(field)
 
     // core glow (billboard)
     this.glowMat = new THREE.ShaderMaterial({
@@ -210,7 +212,7 @@ export class Pulsar {
     const glow = new THREE.Mesh(quad, this.glowMat)
     glow.frustumCulled = false
     glow.renderOrder = 5
-    if (!location.search.includes('pg')) this.group.add(glow) // TEMP
+    this.group.add(glow)
 
     // shock ring (out-beat)
     this.ringMat = new THREE.ShaderMaterial({
@@ -222,7 +224,7 @@ export class Pulsar {
     this.ring = new THREE.Mesh(quad, this.ringMat)
     this.ring.frustumCulled = false
     this.ring.renderOrder = 6
-    if (!location.search.includes('pr')) this.group.add(this.ring) // TEMP
+    this.group.add(this.ring)
   }
 
   update(o: {
@@ -230,6 +232,8 @@ export class Pulsar {
     angle: number
     pulse: number
     intensity: number
+    /** core billboard size in world units */
+    size: number
     beam: number
     ring: number
     camPos: THREE.Vector3
@@ -242,11 +246,12 @@ export class Pulsar {
     this.fieldMat.uniforms.uIntensity.value = o.intensity
     this.glowMat.uniforms.uIntensity.value = o.intensity
     this.glowMat.uniforms.uPulse.value = o.pulse
+    this.glowMat.uniforms.uSize.value = o.size
     this.glowMat.uniforms.uRot.value = 0.18 + o.time * 0.01
     const r = o.ring
     this.ring.visible = r > 0.001
     this.ringMat.uniforms.uSize.value = 2 + Math.pow(r, 1.6) * 90
-    this.ringMat.uniforms.uIntensity.value = Math.sin(Math.min(1, r * 1.15) * Math.PI) * 1.4 + r * 0.6
+    this.ringMat.uniforms.uIntensity.value = Math.sin(Math.min(1, r * 1.1) * Math.PI) * 0.9 + r * 0.25
     this.ringMat.uniforms.uT.value = r
   }
 }

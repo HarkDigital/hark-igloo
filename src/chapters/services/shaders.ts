@@ -10,6 +10,10 @@ const HEAD = /* glsl */ `
 const vec3 SIGNAL = vec3(0.0, 1.0, 0.235);
 const float PI = 3.141592653589793;
 const float TAU = 6.283185307179586;
+// NaN-safe powers: pow() of a negative base is undefined (NaN on Metal), and a
+// single NaN pixel smears the whole frame black through the bloom chain
+float sq(float x) { return x * x; }
+float spow(float x, float y) { return pow(max(x, 0.0), y); }
 `
 
 /** Hex tiling on a sphere (lat/long mapped) — used by the security world and the distant planet. */
@@ -152,7 +156,7 @@ void main() {
     float g1 = max(gridLine(lat / (PI / 12.0), 0.035), gridLine(lon / (PI / 12.0), 0.035) * polar);
     float g2 = max(gridLine(lat / (PI / 48.0), 0.05), gridLine(lon / (PI / 48.0), 0.05) * polar) * 0.18;
     float nodes = (1.0 - smoothstep(0.0, 0.12, length(vec2(abs(fract(lat / (PI / 12.0) + 0.5) - 0.5), abs(fract(lon / (PI / 12.0) + 0.5) - 0.5))))) * polar;
-    float scan = exp(-pow((q.y - sin(t * 0.35) * 0.9) * 10.0, 2.0));
+    float scan = exp(-sq((q.y - sin(t * 0.35) * 0.9) * 10.0));
     alb = vec3(0.02, 0.03, 0.036);
     emi = SIGNAL * (g1 * (0.55 + 0.9 * scan) + g2 + nodes * 1.6) + vec3(0.6, 1.0, 0.8) * scan * 0.06;
     spec = 0.5;
@@ -172,7 +176,7 @@ void main() {
     float ang = acos(clamp(dot(N, uAxis), -1.0, 1.0));
     alb = vec3(0.03, 0.036, 0.04) * (0.7 + 0.6 * fbm(q * 3.5 + uSeed, 3));
     float wave = fract(t * 0.3 - ang / PI * 3.0);
-    float ring = pow(wave, 18.0) * smoothstep(0.06, 0.3, ang) * (1.0 - ang / PI);
+    float ring = spow(wave, 18.0) * smoothstep(0.06, 0.3, ang) * (1.0 - ang / PI);
     float survey = gridLine(ang * 10.0 / PI, 0.015) * smoothstep(0.1, 0.3, ang);
     float beacon = exp(-ang * ang * 160.0);
     float core = exp(-ang * ang * 30.0);
@@ -188,8 +192,8 @@ void main() {
     // AI — neural filaments
     float n1 = snoise(q * 2.1 + uSeed);
     float n2 = snoise(q * 4.6 + 11.0);
-    float f1 = pow(1.0 - abs(n1), 16.0);
-    float f2 = pow(1.0 - abs(n2), 24.0) * 0.6;
+    float f1 = spow(1.0 - abs(n1), 16.0);
+    float f2 = spow(1.0 - abs(n2), 24.0) * 0.6;
     float pulse = 0.5 + 0.5 * sin(t * 1.5 - (n1 + q.y) * 7.0);
     vec3 vv = voronoi3(q * 4.5 + uSeed);
     float node = (1.0 - smoothstep(0.05, 0.13, vv.x)) * step(0.62, vv.z);
@@ -213,14 +217,16 @@ void main() {
     float dist = length(q - o);
     float front = uHeal * 2.35;
     float healed = 1.0 - smoothstep(front - 0.22, front, dist);
-    float w = mix(0.07, 0.012, healed);
+    float w = mix(0.034, 0.01, healed);
     float crack = 1.0 - smoothstep(w, w + fw * 1.5, e);
+    // thin the glow where cracks go sub-pixel so the far body never blooms into a blob
+    crack *= clamp(w / max(fw * 1.2, 1e-4), 0.25, 1.0);
     float flick = 0.72 + 0.28 * sin(t * 9.0 + v.z * 40.0);
-    vec3 hot = vec3(0.9, 2.6, 1.35) * flick;
+    vec3 hot = vec3(0.3, 1.05, 0.55) * flick;
     vec3 seamC = SIGNAL * 0.3;
-    float frontGlow = exp(-pow((dist - front) * 8.0, 2.0)) * step(0.002, uHeal) * step(uHeal, 0.998);
+    float frontGlow = exp(-sq((dist - front) * 8.0)) * step(0.002, uHeal) * step(uHeal, 0.998);
     alb = vec3(0.034, 0.036, 0.034) * (0.7 + 0.6 * fbm(q * 4.0, 3)) * (1.0 - crack * 0.8);
-    emi = mix(hot, seamC, healed) * crack + SIGNAL * frontGlow * (0.25 + 1.8 * crack);
+    emi = mix(hot, seamC, healed) * crack + SIGNAL * frontGlow * (0.05 + 1.1 * crack);
     emi += SIGNAL * 0.06 * (1.0 - healed) * step(0.7, v.z) * flick;
     spec = 0.2;
   } else if (uKind == 8) {
@@ -243,7 +249,7 @@ void main() {
     float rc = 0.22 + 0.2 * v.z;
     float d = v.x / rc;
     float bowl = 1.0 - smoothstep(0.65, 1.0, d);
-    float rim = exp(-pow((d - 1.0) * 5.0, 2.0));
+    float rim = exp(-sq((d - 1.0) * 5.0));
     vec3 v2 = voronoi3(q * 9.0 + 3.0);
     float d2 = v2.x / (0.2 + 0.15 * v2.z);
     float bowl2 = 1.0 - smoothstep(0.6, 1.0, d2);
@@ -257,10 +263,10 @@ void main() {
   float diff = smoothstep(-0.1, 0.95, ndl);
   vec3 col = alb * vec3(1.0, 1.03, 0.99) * diff * 1.7;
   vec3 H = normalize(L + V);
-  col += spec * pow(max(dot(N, H), 0.0), 48.0) * step(0.0, ndl) * vec3(0.8, 1.0, 0.9);
+  col += spec * spow(max(dot(N, H), 0.0), 48.0) * step(0.0, ndl) * vec3(0.8, 1.0, 0.9);
   col += emi * mix(0.4, 1.0, night) * (0.85 + 0.3 * uFocus);
   // lit-limb scattering and a whisper of green on the night side
-  col += SIGNAL * pow(fres, 3.5) * smoothstep(-0.25, 0.6, ndl) * 0.28;
+  col += SIGNAL * spow(fres, 3.5) * smoothstep(-0.25, 0.6, ndl) * 0.28;
   col += alb * SIGNAL * 0.25 * night;
   col *= uDim;
   gl_FragColor = vec4(col, 1.0);
@@ -288,7 +294,7 @@ void main() {
   vec3 N = normalize(vWN);
   vec3 V = normalize(cameraPosition - vWP);
   vec3 L = normalize(uStar - uCenter);
-  float g = pow(clamp(-dot(N, V) / uEdge, 0.0, 1.0), uPower);
+  float g = spow(clamp(-dot(N, V) / uEdge, 0.0, 1.0), uPower);
   float lit = smoothstep(-0.5, 0.7, dot(N, L));
   vec3 col = mix(SIGNAL * 0.6, vec3(0.6, 1.0, 0.8), 0.25) * g * (0.14 + 1.1 * lit) * uStrength;
   gl_FragColor = vec4(col, 1.0);
@@ -319,11 +325,11 @@ void main() {
   vec3 q = rotY(uSpin) * (rotZ(-uTilt) * normalize(vObj));
   vec2 id;
   float he = hexEdge(q, uDensity, id);
-  float sweep = exp(-pow((q.y - uSweep) * 4.5, 2.0));
+  float sweep = exp(-sq((q.y - uSweep) * 4.5));
   float flash = step(0.94, hash12(id + floor(uTime * 1.3))) * (0.5 + 0.5 * sin(uTime * 6.0 + id.x));
   float lit = smoothstep(-0.6, 0.6, dot(N, L));
-  float a = he * (0.05 + 1.1 * pow(fres, 2.2)) * (0.45 + 0.55 * lit) + he * sweep * 0.9 + flash * 0.12 * (0.3 + fres);
-  a += pow(fres, 5.0) * 0.5;
+  float a = he * (0.05 + 1.1 * spow(fres, 2.2)) * (0.45 + 0.55 * lit) + he * sweep * 0.9 + flash * 0.12 * (0.3 + fres);
+  a += spow(fres, 5.0) * 0.5;
   gl_FragColor = vec4(SIGNAL * a * uStrength, 1.0);
 }
 `
@@ -425,7 +431,7 @@ void main() {
   // plasma disc held just under the bloom threshold, blazing limb ring:
   // the dark mark in front stays a crisp silhouette
   vec3 disc = vec3(0.16, 0.5, 0.3) * (0.62 + 0.45 * g + 0.25 * cells);
-  float limb = pow(1.0 - mu, 2.4);
+  float limb = spow(1.0 - mu, 2.4);
   vec3 ring = vec3(0.9, 2.3, 1.45) * limb * (0.85 + 0.3 * g);
   vec3 col = disc + ring;
   gl_FragColor = vec4(col * uHeat, 1.0);
@@ -461,7 +467,7 @@ void main() {
   float mid = exp(-xo * 1.6) * 0.075;
   float wide = exp(-x * 0.45) * 0.014;
   float rays = snoise(vec3(dir * 2.6, x * 0.22 - uTime * 0.04));
-  rays = pow(0.5 + 0.5 * rays, 4.0) * exp(-xo * 0.9) * 0.45;
+  rays = spow(0.5 + 0.5 * rays, 4.0) * exp(-xo * 0.9) * 0.45;
   float I = inner + mid + wide + rays;
   // thin anamorphic streak through the core
   float streak = exp(-abs(vP.y) * 70.0 / uR) * exp(-abs(vP.x) * 0.28 / uR) * 0.32;
@@ -505,7 +511,7 @@ varying vec3 vLocal;
 void main() {
   vec3 N = normalize(vN);
   float facing = abs(N.z);
-  float rim = pow(1.0 - facing, 1.6);
+  float rim = spow(1.0 - facing, 1.6);
   vec3 col;
   if (uDiamond > 0.5) {
     float pulse = 0.9 + 0.1 * sin(uTime * 2.2);
@@ -534,6 +540,7 @@ uniform float uAlpha[${RING_COUNT}];
 `
 
 export const orbitVert =
+  HEAD +
   RING_UNIFORMS +
   /* glsl */ `
 attribute float aRing;
@@ -574,7 +581,7 @@ void main() {
   float hw;
   if (kind == 0) hw = 0.55 + 0.35 * focus;
   else if (kind == 1) hw = 0.5;
-  else hw = mix(3.4, 0.3, pow(aT, 0.6));
+  else hw = mix(3.4, 0.3, spow(aT, 0.6));
   float total = hw + 1.0;
   wp += side * aSide * total * uPxWorld * dist;
 
@@ -615,7 +622,7 @@ void main() {
     a = (0.028 + 0.15 * focus) + dash * (0.06 + 0.2 * focus);
     a += near * (0.16 + 0.75 * focus);
     // leading edge sweep on the focused ring
-    float lead = exp(-pow((dA - 0.55) * 3.0, 2.0)) * focus * 0.3;
+    float lead = exp(-sq((dA - 0.55) * 3.0)) * focus * 0.3;
     a += lead;
     float g = uGap[vRing];
     a *= smoothstep(g, g * 1.7, abs(dA));
@@ -624,8 +631,8 @@ void main() {
     a = 0.04 + 0.5 * focus;
     col = mix(vec3(0.8, 0.9, 0.85), SIGNAL * 1.3, focus);
   } else {
-    float k = 1.0 - vT;
-    a = pow(k, 2.2) * (0.9 + 0.1 * sin(vT * 40.0 - uTime * 14.0));
+    float k = clamp(1.0 - vT, 0.0, 1.0);
+    a = spow(k, 2.2) * (0.9 + 0.1 * sin(vT * 40.0 - uTime * 14.0));
     col = mix(SIGNAL * 1.2, vec3(1.3, 1.9, 1.55), k * k * k);
   }
   a *= aa * uAlpha[vRing] * uMaster;
@@ -731,7 +738,7 @@ varying float vEmit;
 void main() {
   vec3 N = normalize(vWN);
   float d = max(dot(N, uStarDir), 0.0);
-  vec3 col = vec3(0.1, 0.12, 0.12) * (0.15 + d * 1.6) + SIGNAL * pow(d, 12.0) * 0.8;
+  vec3 col = vec3(0.1, 0.12, 0.12) * (0.15 + d * 1.6) + SIGNAL * spow(d, 12.0) * 0.8;
   float blink = step(0.82, fract(uTime * 0.9));
   col = mix(col, vec3(1.5, 3.5, 2.2) * (0.3 + 1.7 * blink), vEmit);
   gl_FragColor = vec4(col, 1.0);

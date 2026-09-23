@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import type { Chapter, ChapterContext, Frame } from '../../core/types'
 import { Callout, el, reveal } from '../../core/dom'
 import { scrambleAt } from '../../core/scramble'
-import { clamp, ease, lerp, remap, segment, smoothstep, window01 } from '../../core/math'
+import { clamp, damp, ease, lerp, remap, segment, smoothstep } from '../../core/math'
 import { Planet } from '../../world/Planet'
 import { SECURITY, STATS } from '../../content'
 import { HexShield } from './hexShield'
@@ -21,6 +21,9 @@ import './shield.css'
  *   0.66–0.92  CALM: shield breathes, slow scan band; 24/7 stat + CTA;
  *              callout "SHIELD 100% · MONITORING 24/7"
  *   0.90–1.00  out-beat: camera swings off into a field of glittering shards
+ *
+ * 3D is scroll-driven; HUD copy is picked by scroll but faded/decoded in time
+ * (Beat/Decode below) so it always settles fully readable at rest.
  */
 
 const PLANET_R = 2
@@ -34,6 +37,44 @@ const noise1 = (v: number) => fract(Math.sin(v * 12.9898 + 78.233) * 43758.5453)
 
 function setText(node: HTMLElement, s: string) {
   if (node.textContent !== s) node.textContent = s
+}
+
+/**
+ * A HUD beat whose visibility is picked by scroll but eased and decoded in
+ * time, so text never rests half-faded or half-scrambled.
+ */
+class Beat {
+  vis = 0
+  private since = -1
+  update(on: boolean, now: number, dt: number) {
+    if (on && this.since < 0) this.since = now
+    const target = on ? 1 : 0
+    this.vis = damp(this.vis, target, on ? 9 : 15, dt)
+    if (Math.abs(this.vis - target) < 0.004) this.vis = target
+    if (!on && this.vis === 0) this.since = -1
+    return this.vis
+  }
+  reset() {
+    this.vis = 0
+    this.since = -1
+  }
+  /** seconds since this beat switched on */
+  time(now: number) {
+    return this.since < 0 ? 0 : now - this.since
+  }
+}
+
+/** Replays a short decode whenever the text it shows changes. */
+class Decode {
+  private text = ''
+  private since = 0
+  at(now: number, text: string, dur: number, instant = false) {
+    if (text !== this.text) {
+      this.text = text
+      this.since = now
+    }
+    return instant ? text : scrambleAt(text, (now - this.since) / dur)
+  }
 }
 
 interface Dom {
@@ -162,22 +203,34 @@ export default function create(): Chapter {
   /** 0 = landscape layout, 1 = portrait layout */
   const portrait = (f: Frame) => clamp(remap(f.width / f.height, 1.05, 0.62, 0, 1))
 
+  // time-settled HUD beats (scroll picks WHICH state; time plays the decode)
+  const bAlert = new Beat()
+  const bCopy = new Beat()
+  const bCalm = new Beat()
+  const bBreach = new Beat()
+  const bStatus = new Beat()
+  const alertHead = new Decode()
+
   function updateDom(local: number, frame: Frame, ctx: ChapterContext, pulse: number, sealed: number) {
     const t = frame.time
+    const dt = frame.dt
     const d = dom
-    const alertVis = window01(local, 0.012, 0.47, 0.035)
+    // reduced motion: no glyph noise, text simply appears
+    const dec = (v: number) => (ctx.reducedMotion ? (v > 0 ? 1 : 0) : v)
     const safe = local > 0.36
     reveal(d.tint, (1 - smoothstep(0.3, 0.42, local)) * (0.55 + 0.45 * pulse), 0)
 
     // ---- ALERT readout
+    // portrait: the planet rises into the readout's space once the copy lands
+    const alertEnd = portrait(frame) > 0.5 ? 0.35 : 0.46
+    const alertVis = bAlert.update(local > 0.012 && local < alertEnd, t, dt)
     reveal(d.alert, alertVis, 0)
     if (alertVis > 0) {
+      const at = bAlert.time(t)
       d.alert.classList.toggle('is-safe', safe)
-      const headText = safe ? 'BREACH CONTAINED' : 'BREACH DETECTED'
-      const ht = safe ? segment(local, 0.36, 0.42) : segment(local, 0.02, 0.1)
-      setText(d.alertHead, scrambleAt(headText, ht))
-      d.rows.forEach((r, i) => setText(r.label, scrambleAt(r.text, segment(local, 0.04 + i * 0.018, 0.11 + i * 0.018))))
-      const valT = segment(local, 0.07, 0.14)
+      setText(d.alertHead, alertHead.at(t, safe ? 'BREACH CONTAINED' : 'BREACH DETECTED', 0.45, ctx.reducedMotion))
+      d.rows.forEach((r, i) => setText(r.label, scrambleAt(r.text, dec((at - 0.08 - i * 0.07) / 0.4))))
+      const valT = dec((at - 0.22) / 0.4)
       const jitter = noise1(Math.floor(t * 7))
       const lvl = safe ? Math.round(lerp(8, 0, sealed)) : 8 + (jitter > 0.55 ? 1 : 0)
       const nb = valT > 0 ? Math.round(lvl * Math.min(1, valT * 1.4)) : 0
@@ -194,12 +247,13 @@ export default function create(): Chapter {
     }
 
     // ---- BREATHE copy
-    const copyVis = window01(local, 0.365, 0.665, 0.03)
+    const copyVis = bCopy.update(local > 0.375 && local < 0.66, t, dt)
     reveal(d.copy, copyVis, 18)
     if (copyVis > 0) {
-      setText(d.eyebrow, scrambleAt(SECURITY.eyebrow, segment(local, 0.37, 0.45)))
+      const ct = bCopy.time(t)
+      setText(d.eyebrow, scrambleAt(SECURITY.eyebrow, dec(ct / 0.6)))
       d.lines.forEach((ln, i) => {
-        const k = ease.outCubic(segment(local, 0.38 + i * 0.03, 0.46 + i * 0.03))
+        const k = ctx.reducedMotion ? 1 : ease.outCubic(clamp((ct - 0.06 - i * 0.16) / 0.6))
         ln.style.transform = `translate3d(0, ${((1 - k) * 108).toFixed(1)}%, 0)`
         // drop the mask once risen so glows aren't cut into boxes
         const wrap = ln.parentElement!
@@ -209,18 +263,20 @@ export default function create(): Chapter {
           wrap.classList.toggle('is-done', !!done)
         }
       })
-      reveal(d.body, segment(local, 0.445, 0.5), 10)
+      reveal(d.body, clamp((ct - 0.4) / 0.4), 10)
     }
 
     // ---- CALM: 24/7 + CTA
-    const calmVis = window01(local, 0.665, 0.9, 0.035)
+    // off before the out-beat swing slides the planet under the copy
+    const calmVis = bCalm.update(local > 0.665 && local < 0.862, t, dt)
     reveal(d.calm, calmVis, 18)
     if (calmVis > 0) {
+      const mt = bCalm.time(t)
       const eyebrowText = portrait(frame) > 0.5 ? 'Shield 100% · Monitoring 24/7' : 'Always on watch'
-      setText(d.calmEyebrow, scrambleAt(eyebrowText, segment(local, 0.67, 0.73)))
-      setText(d.statV, scrambleAt(STAT.value, segment(local, 0.68, 0.75)))
-      reveal(d.statLabel, segment(local, 0.71, 0.76), 10)
-      reveal(d.cta, segment(local, 0.735, 0.785), 10)
+      setText(d.calmEyebrow, scrambleAt(eyebrowText, dec(mt / 0.55)))
+      setText(d.statV, scrambleAt(STAT.value, dec((mt - 0.08) / 0.5)))
+      reveal(d.statLabel, clamp((mt - 0.3) / 0.35), 10)
+      reveal(d.cta, clamp((mt - 0.45) / 0.35), 10)
     }
 
     // ---- callouts (camera is last frame's pose; fine for HUD)
@@ -229,7 +285,7 @@ export default function create(): Chapter {
     const w = frame.width
     const h = frame.height
     const port = portrait(frame)
-    const breachVis = window01(local, 0.1, 0.345, 0.03)
+    const breachVis = bBreach.update(local > 0.1 && local < 0.345, t, dt)
     anchor.copy(BREACH).multiplyScalar(SHIELD_R)
     if (breachVis > 0) {
       const hex = Math.floor(noise1(Math.floor(t * 9)) * 0xffffff)
@@ -245,7 +301,7 @@ export default function create(): Chapter {
     d.breach.update(anchor, cam, w, h, breachVis)
 
     // landscape only: on portrait the same status line becomes the calm eyebrow
-    const statusVis = window01(local, 0.7, 0.885, 0.03) * (port > 0.5 ? 0 : 1)
+    const statusVis = bStatus.update(local > 0.7 && local < 0.855 && port <= 0.5, t, dt)
     camRight.setFromMatrixColumn(cam.matrixWorld, 0)
     camUp.setFromMatrixColumn(cam.matrixWorld, 1)
     const a = 2.3 // upper-left rim, leader runs up-left into open space
@@ -291,6 +347,11 @@ export default function create(): Chapter {
       group.add(shards.mesh)
 
       dom = buildDom(ctx.stage)
+    },
+
+    onEnter() {
+      // replay every HUD decode on (re)entry
+      for (const b of [bAlert, bCopy, bCalm, bBreach, bStatus]) b.reset()
     },
 
     update(local, frame, ctx) {
@@ -343,7 +404,7 @@ export default function create(): Chapter {
     camera(local, frame, out) {
       const port = portrait(frame)
       const inT = ease.outExpo(segment(local, 0, 0.08))
-      const shift = ease.inOutCubic(segment(local, 0.3, 0.47))
+      const shift = ease.inOutCubic(segment(local, 0.28, 0.4))
       const yaw = lerp(-0.2, 0.46, ease.inOutQuad(segment(local, 0.04, 0.96)))
       const pitch = lerp(0.16, 0.07, shift)
       let dist = lerp(lerp(9.8, 11.4, shift), lerp(14.6, 15.5, shift), port)

@@ -49,6 +49,8 @@
 }
 .stage-services .svc-stack {
   display: grid;
+  align-items: start;
+  transition: height 0.5s cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .stage-services .svc-item {
   grid-area: 1 / 1;
@@ -75,10 +77,25 @@
   color: var(--faint);
 }
 .stage-services .svc-title {
+  position: relative;
   font-size: clamp(1.45rem, 2.15vw, 2.2rem);
   line-height: 1;
+}
+/* the sizer holds the exact title; decoding glyphs play on top without reflow */
+.stage-services .svc-title-size {
+  display: block;
+  visibility: hidden;
+  text-shadow: none;
+}
+.stage-services .svc-title-live {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
   white-space: pre-wrap;
-  overflow-wrap: break-word;
+}
+.stage-services .svc-rule {
+  transform-origin: 0 50%;
 }
 .stage-services .svc-rule {
   margin: 16px 0 14px;
@@ -89,7 +106,6 @@
   line-height: 1.6;
 }
 .stage-services .svc-tags {
-  margin-top: auto;
   padding-top: 16px;
 }
 .stage-services .svc-tags .hud-tag {
@@ -101,8 +117,7 @@
 .stage-services .svc-rail {
   position: absolute;
   right: var(--gutter);
-  top: 50%;
-  transform: translateY(-50%);
+  bottom: calc(var(--safe-bottom) + 88px);
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -123,7 +138,8 @@
   font-weight: 500;
   letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: rgba(242, 246, 244, 0.3);
+  color: rgba(242, 246, 244, 0.36);
+  text-shadow: 0 1px 8px rgba(2, 3, 4, 1), 0 0 2px rgba(2, 3, 4, 0.9);
   transition: color 0.35s ease;
 }
 .stage-services .svc-rail-t {
@@ -217,7 +233,8 @@
     width: auto;
   }
   .stage-services .svc-intro-title {
-    font-size: clamp(2.6rem, 13vw, 3.6rem);
+    /* Syne 800 caps run ~0.95em per glyph: keep all 8 inside the gutters */
+    font-size: min(11vw, 3.6rem);
     margin: 10px 0 12px;
   }
   .stage-services .svc-intro-body {
@@ -245,25 +262,46 @@
     padding-top: 12px;
   }
   .stage-services .svc-rail {
-    right: auto;
     left: var(--gutter);
-    top: calc(var(--safe-top) + 8px);
-    transform: none;
-    align-items: flex-start;
+    right: var(--gutter);
+    top: calc(var(--safe-top) + 2px);
+    bottom: auto;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: 0;
   }
   .stage-services .svc-rail-item {
-    flex-direction: row-reverse;
-    padding: 4px 12px 4px 0;
-    gap: 8px;
+    flex: 1 1 0;
+    flex-direction: column-reverse;
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 34px;
+    padding: 6px 0 6px;
+    gap: 7px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
   }
   .stage-services .svc-rail-t {
     display: none;
   }
   .stage-services .svc-rail-n {
-    text-align: left;
+    width: auto;
+    text-align: center;
+  }
+  .stage-services .svc-rail-bar {
+    width: 100%;
+    max-width: 22px;
+    height: 1px;
+    transition:
+      max-width 0.45s cubic-bezier(0.2, 0.7, 0.2, 1),
+      background 0.35s ease,
+      box-shadow 0.35s ease;
   }
   .stage-services .svc-rail-item.is-active .svc-rail-bar {
-    width: 18px;
+    width: 100%;
+    max-width: 28px;
+    height: 2px;
   }
   .stage-services .svc-co-tel--2 {
     display: none;

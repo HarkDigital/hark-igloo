@@ -29,11 +29,11 @@ void main() {
   vec3 N = normalize(vN);
   vec3 V = normalize(uCamPos - vW);
   if (dot(N, V) < 0.0) N = -N;
-  float ndv = max(dot(N, V), 0.0);
+  float ndv = clamp(dot(N, V), 0.0, 1.0);
   float fres = pow(1.0 - ndv, 3.0);
   float spec = pow(max(dot(reflect(-uLight, N), V), 0.0), 48.0);
   float h = hash12(vec2(vSeed, 3.7));
-  float tw = pow(0.5 + 0.5 * sin(uTime * (1.2 + h * 2.6) + h * 40.0), 30.0);
+  float tw = pow(clamp(0.5 + 0.5 * sin(uTime * (1.2 + h * 2.6) + h * 40.0), 0.0, 1.0), 30.0);
   vec3 ice = vec3(0.72, 1.0, 0.9);
   vec3 col = vec3(0.006, 0.012, 0.014) + vec3(0.02, 0.06, 0.05) * ndv;
   col += ice * fres * 0.7;

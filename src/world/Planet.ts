@@ -1,7 +1,8 @@
 import * as THREE from 'three'
 import type { Frame } from '../core/types'
 import { rng } from '../core/math'
-import { snoise, fbm } from './cpuNoise'
+import { snoise } from './cpuNoise'
+import { bakeQueue } from './bakeQueue'
 import {
   ARC_FRAG,
   ARC_VERT,
@@ -13,6 +14,8 @@ import {
   NODE_VERT,
   RING_FRAG,
   RING_VERT,
+  SURFACE_BAKE_FRAG,
+  SURFACE_BAKE_VERT,
 } from './planetShaders'
 
 /**
@@ -29,6 +32,12 @@ import {
  * (rim scattering that blooms on the lit limb, forward-scatter glow when the
  * sun is behind the planet), and optional banded rings with planet shadow
  * (and ring shadows cast back onto the surface).
+ *
+ * Performance: the static, low-frequency surface fields (warped continents,
+ * relief, cloud deck) are baked once into a small object-space cube map the
+ * first time the engine renders (see bakeQueue); per pixel only the fine
+ * octaves run live, with pixel-footprint LOD. A live fallback remains if the
+ * bake is unsupported.
  *
  * Most options can be changed at runtime by editing `planet.opts.*`; they're
  * pushed to the GPU on the next update(). (`rings`, `cityLights`, `network`,
@@ -115,6 +124,8 @@ export class Planet {
   private seedVec: THREE.Vector3
   private oceanLevel: number
   private popLevel: number
+  private surface: THREE.WebGLCubeRenderTarget | null = null
+  private baked = false
 
   constructor(options: PlanetOptions) {
     const defined = Object.fromEntries(Object.entries(options).filter(([, v]) => v !== undefined)) as PlanetOptions
@@ -182,9 +193,10 @@ export class Planet {
     this.bodyMat = new THREE.ShaderMaterial({
       vertexShader: BODY_VERT,
       fragmentShader: BODY_FRAG,
-      defines: { TERRAIN_OCT: mobile ? 5 : 7, CLOUD_OCT: mobile ? 4 : 5, NET_LEVELS: mobile ? 1 : 2 },
+      defines: { TERRAIN_OCT: mobile ? 5 : 7, CLOUD_OCT: mobile ? 4 : 5, NET_LEVELS: mobile ? 1 : 2, BAKED: 1 },
       uniforms: {
         ...U,
+        uSurf: { value: null },
         uSeed: { value: seedVec },
         uColA: { value: new THREE.Color(o.colorA) },
         uColB: { value: new THREE.Color(o.colorB) },
@@ -198,6 +210,11 @@ export class Planet {
       },
     })
     this.body = new THREE.Mesh(new THREE.SphereGeometry(R, seg, seg / 2), this.bodyMat)
+    // normally baked by the Sky's flush; this covers a planet that renders first
+    this.body.onBeforeRender = renderer => {
+      if (!this.baked) this.bake(renderer)
+    }
+    bakeQueue.add(this)
     this.spinner.add(this.body)
     this.group.add(this.spinner)
 
@@ -270,6 +287,77 @@ export class Planet {
 
     // ---- network (arcs + nodes) on the night side
     if (o.cityLights && o.network) this.buildNetwork(seedVec, ocean, pop, r)
+  }
+
+  /**
+   * Bake the static surface fields into an object-space cube map (once).
+   * Half-float where renderable (clean relief derivatives), else 8-bit;
+   * if rendering fails entirely the body shader evaluates everything live.
+   */
+  bake(renderer: THREE.WebGLRenderer) {
+    if (this.baked) return
+    this.baked = true
+    bakeQueue.delete(this)
+    const size = this.opts.mobile ? 256 : 512
+    const half = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float')
+    const rt = new THREE.WebGLCubeRenderTarget(size, {
+      type: half ? THREE.HalfFloatType : THREE.UnsignedByteType,
+      generateMipmaps: true,
+      minFilter: THREE.LinearMipmapLinearFilter,
+      magFilter: THREE.LinearFilter,
+      depthBuffer: false,
+    })
+    rt.texture.colorSpace = THREE.NoColorSpace
+    const scene = new THREE.Scene()
+    const geo = new THREE.BoxGeometry(2, 2, 2)
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: SURFACE_BAKE_VERT,
+      fragmentShader: SURFACE_BAKE_FRAG,
+      uniforms: { uSeed: { value: this.seedVec } },
+      side: THREE.BackSide,
+      depthTest: false,
+      depthWrite: false,
+    })
+    scene.add(new THREE.Mesh(geo, mat))
+    const cam = new THREE.CubeCamera(0.1, 10, rt)
+    const prevTone = renderer.toneMapping
+    const prevAuto = renderer.autoClear
+    renderer.toneMapping = THREE.NoToneMapping
+    renderer.autoClear = true
+    let ok = false
+    try {
+      cam.update(renderer, scene)
+      ok = true
+    } catch (err) {
+      console.warn('[hark] planet surface bake failed; using live shading', err)
+    } finally {
+      renderer.toneMapping = prevTone
+      renderer.autoClear = prevAuto
+      geo.dispose()
+      mat.dispose()
+    }
+    if (ok) {
+      this.surface = rt
+      this.bodyMat.uniforms.uSurf.value = rt.texture
+    } else {
+      rt.dispose()
+      this.bodyMat.defines.BAKED = 0
+      this.bodyMat.needsUpdate = true
+    }
+  }
+
+  /** Free GPU resources (geometry, materials, the baked surface). */
+  dispose() {
+    bakeQueue.delete(this)
+    this.surface?.dispose()
+    this.surface = null
+    this.group.traverse(o => {
+      const m = o as THREE.Mesh
+      if (m.geometry) m.geometry.dispose()
+      const mat = m.material as THREE.Material | THREE.Material[] | undefined
+      if (Array.isArray(mat)) mat.forEach(x => x.dispose())
+      else mat?.dispose()
+    })
   }
 
   /** Terrain / population thresholds from the real noise distribution. */
@@ -491,16 +579,36 @@ export class Planet {
   }
 }
 
-/** CPU twin of the GLSL terrain() (fewer octaves) — used to place cities on land. */
+/**
+ * CPU twin of the GLSL terrain (terrainBase + terrainDetail, fewer octaves) —
+ * used to place cities on land. Octaves 0..3 are domain-warped (baked on the
+ * GPU), octaves 4+ are not (evaluated live on the GPU).
+ */
 function terrainCPU(px: number, py: number, pz: number, seed: THREE.Vector3, octaves: number) {
-  let qx = px * 1.3 + seed.x
-  let qy = py * 1.3 + seed.y
-  let qz = pz * 1.3 + seed.z
-  const wx = snoise(qx * 0.8 + 11.3, qy * 0.8, qz * 0.8)
-  const wy = snoise(qx * 0.8 - 7.1, qy * 0.8 + 3.3, qz * 0.8 + 5.9)
-  const wz = snoise(qx * 0.8 + 2.7, qy * 0.8 - 9.4, qz * 0.8 + 1.3)
-  qx += wx * 0.45
-  qy += wy * 0.45
-  qz += wz * 0.45
-  return fbm(qx * 1.4, qy * 1.4, qz * 1.4, octaves)
+  const ux = px * 1.3 + seed.x
+  const uy = py * 1.3 + seed.y
+  const uz = pz * 1.3 + seed.z
+  const wx = snoise(ux * 0.8 + 11.3, uy * 0.8, uz * 0.8)
+  const wy = snoise(ux * 0.8 - 7.1, uy * 0.8 + 3.3, uz * 0.8 + 5.9)
+  const wz = snoise(ux * 0.8 + 2.7, uy * 0.8 - 9.4, uz * 0.8 + 1.3)
+  // warped (x) and unwarped (u) octave coordinates, advanced in lockstep
+  let x = (ux + wx * 0.45) * 1.4
+  let y = (uy + wy * 0.45) * 1.4
+  let z = (uz + wz * 0.45) * 1.4
+  let dx = ux * 1.4
+  let dy = uy * 1.4
+  let dz = uz * 1.4
+  let a = 0.5
+  let s = 0
+  for (let i = 0; i < octaves; i++) {
+    s += a * (i < 4 ? snoise(x, y, z) : snoise(dx, dy, dz))
+    x = x * 2.03 + 1.7
+    y = y * 2.03 + 9.2
+    z = z * 2.03 + 3.4
+    dx = dx * 2.03 + 1.7
+    dy = dy * 2.03 + 9.2
+    dz = dz * 2.03 + 3.4
+    a *= 0.5
+  }
+  return s
 }

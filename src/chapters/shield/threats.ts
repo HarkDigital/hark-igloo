@@ -55,7 +55,7 @@ varying float vAmp;
 void main() {
   if (vAmp <= 0.001) discard;
   float core = exp(-vSide * vSide * 5.0);
-  float along = pow(vS, 2.6);
+  float along = pow(clamp(vS, 0.0, 1.0), 2.6);
   vec3 red = vec3(1.0, 0.05, 0.1);
   vec3 hot = vec3(1.0, 0.62, 0.38);
   vec3 col = mix(red, hot, smoothstep(0.82, 1.0, vS));
@@ -81,7 +81,7 @@ void main() {
   vec3 d = im.xyz;
   vec3 r = normalize(aRand.xyz - 0.5 + 1e-3);
   vec3 t = normalize(r - d * dot(r, d) + 1e-4);
-  float e = 1.0 - pow(1.0 - age, 3.0);
+  float e = 1.0 - pow(max(1.0 - age, 0.0), 3.0);
   float sp = e * (0.25 + aRand.w * 1.25);
   vec3 p = d * (uR + sp * 0.5 * aRand.w) + t * sp;
   vA = amp * pow(1.0 - age, 1.8);

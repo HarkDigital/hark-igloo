@@ -6,6 +6,9 @@
 
 .chrome {
   --ch-y: clamp(18px, 3.3vh, 32px);
+  /* bottom band sits lower so index + rail + telemetry always clear
+     var(--safe-bottom) by ~10px (chapter copy lives above that line) */
+  --ch-yb: clamp(16px, 2.4vh, 30px);
   --ch-ink: var(--paper);
   --ch-dim: rgba(242, 246, 244, 0.62);
   --ch-faint: rgba(242, 246, 244, 0.3);
@@ -479,6 +482,19 @@
 .ch-menu[hidden] {
   display: none;
 }
+/* the page is scroll-locked (Lenis stopped) while the menu is open; stop touch
+   drags on the overlay from scrolling the story underneath */
+.ch-menu {
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+@media (max-height: 560px) {
+  .ch-menu {
+    justify-content: flex-start;
+    overflow-y: auto;
+    touch-action: pan-y;
+  }
+}
 .is-menu .ch-menu {
   opacity: 1;
 }
@@ -589,7 +605,7 @@
   z-index: 1;
   left: var(--gutter);
   right: var(--gutter);
-  bottom: var(--ch-y);
+  bottom: var(--ch-yb);
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -681,7 +697,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 8px;
+  gap: 6px;
   opacity: 0;
   transform: translateY(6px);
   transition:
@@ -854,7 +870,7 @@
 }
 
 /* short desktop viewports: drop the telemetry line to stay inside the band */
-@media (max-height: 720px) and (min-width: 821px) {
+@media (max-height: 720px) and (min-width: 901px) {
   .ch-telemetry {
     display: none;
   }
@@ -862,7 +878,8 @@
 
 /* ------------------------------------------------------------ small screens */
 
-@media (max-width: 820px) {
+/* ≤ 900px the brand + full nav no longer fit side by side: MENU overlay */
+@media (max-width: 900px) {
   .ch-nav {
     display: none;
   }
@@ -914,6 +931,29 @@
   }
   .ch-brand {
     gap: 11px;
+  }
+}
+/* very narrow phones (≤ 380px): tighten so MENU never spills off-screen;
+   the brand clips (never pushes) if a font falls back wider */
+@media (max-width: 380px) {
+  .ch-top {
+    gap: 12px;
+  }
+  .ch-brand {
+    min-width: 0;
+    gap: 10px;
+  }
+  .ch-brand-text {
+    overflow: hidden;
+  }
+  .ch-sub {
+    font-size: 7.5px;
+    letter-spacing: 0.1em;
+  }
+  .ch-menu-btn {
+    flex: none;
+    gap: 8px;
+    padding-left: 8px;
   }
 }
 
@@ -1014,6 +1054,7 @@
 
 .ld-core {
   --ld-size: 184px;
+  --ld-col: 200px;
   position: absolute;
   z-index: 3;
   inset: 0;
@@ -1115,8 +1156,8 @@
 
 .ld-mark {
   position: relative;
-  width: 76px;
-  height: 76px;
+  width: 82px;
+  height: 82px;
   overflow: visible;
 }
 .ld-mark path {
@@ -1176,7 +1217,7 @@
 }
 .ld-bar {
   position: relative;
-  width: 176px;
+  width: var(--ld-col);
   height: 1px;
   margin-top: 16px;
   background: rgba(242, 246, 244, 0.14);
@@ -1190,13 +1231,16 @@
   box-shadow: 0 0 8px rgba(0, 255, 133, 0.8);
 }
 .ld-status {
+  /* left-anchored under the bar: types like a terminal, caret rides the text */
+  width: var(--ld-col);
   margin: 14px 0 0;
   min-height: 1.4em;
   font-size: 9.5px;
   font-weight: 500;
-  letter-spacing: 0.24em;
+  letter-spacing: 0.22em;
   color: rgba(242, 246, 244, 0.62);
   white-space: pre;
+  text-align: left;
 }
 .ld-caret {
   color: var(--signal);
@@ -1259,8 +1303,8 @@
     --ld-size: 152px;
   }
   .ld-mark {
-    width: 62px;
-    height: 62px;
+    width: 66px;
+    height: 66px;
   }
   .ld-count {
     font-size: 22px;

@@ -124,7 +124,9 @@ void main() {
   vec3 N = normalize(vN);
   vec3 V = normalize(uCamPos - vWorld);
   float facing = dot(N, V);
-  float fres = pow(1.0 - abs(facing), 2.0);
+  // clamp every pow() base: an ulp past 1.0 makes pow(neg) = NaN, and bloom
+  // smears a single NaN pixel across the whole frame
+  float fres = pow(clamp(1.0 - abs(facing), 0.0, 1.0), 2.0);
   float backside = step(facing, 0.0);
   vec3 cell = normalize(vCell);
   vec3 P = normalize(vObj);
@@ -170,7 +172,7 @@ void main() {
     float amp = uImpactAmp[i];
     if (amp <= 0.001) continue;
     vec4 im = uImpacts[i];
-    float age = im.w;
+    float age = clamp(im.w, 0.0, 1.0);
     float dc = acos(clamp(dot(cell, im.xyz), -1.0, 1.0));
     float dp = acos(clamp(dot(P, im.xyz), -1.0, 1.0));
     float r = 0.02 + age * 0.62;

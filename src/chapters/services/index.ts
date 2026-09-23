@@ -88,7 +88,7 @@ export default function create(): Chapter {
       const s = ease.inOutCubic(segment(frac, 0.3, 0.8))
       worldPose(k, local, v, pA)
       worldPose(k + 1, local, v, pB)
-      blendPose(pA, pB, s, 1.1, out)
+      blendPose(pA, pB, s, 1.8, out)
       return k + s
     }
     if (local < TL.s1 || !scene) {
@@ -171,39 +171,40 @@ export default function create(): Chapter {
         theta[k] = (worldAngle(WORLDS[k], local) * 180) / Math.PI
       }
 
-      // ---- visibility envelopes ----
-      const introVis = window01(local, 0.028, TL.s0 + 0.004, 0.03)
-      const panelVis = window01(local, TL.s0 - 0.004, TL.s1 + 0.01, 0.026)
-      const railVis = window01(local, TL.s0 - 0.012, TL.s1 + 0.018, 0.03)
-      const estLabels = window01(local, 0.04, TL.s0 + 0.01, 0.025)
-      const exitFade = 1 - smoothstep(TL.s1, TL.s1 + 0.03, local)
+      // ---- what should be on screen (the HUD tweens it in/out in time) ----
+      const kF = clamp(Math.round(F), 0, COUNT - 1)
+      const dF = F - kF
+      const panelOn = local >= TL.s0 - 0.008 && local < TL.s1 + 0.008
+      const holding = dF > -0.32 && (dF < 0.32 || (kF === COUNT - 1 && local < TL.s1))
       for (let k = 0; k < COUNT; k++) {
-        const near = 1 - clamp(Math.abs(F - k) / 0.7)
-        labels[k] = Math.max(estLabels, panelVis * 0.8) * (1 - near * panelVis) * exitFade
+        const near = 1 - smoothstep(0.3, 0.62, Math.abs(F - k))
+        labels[k] = 1 - near
       }
-      const kRet = clamp(Math.round(F), 0, COUNT - 1)
-      const dRet = F - kRet
-      const reticleVis = Math.min(smoothstep(-0.42, -0.2, dRet), 1 - smoothstep(0.3, 0.48, dRet)) * panelVis
+      const reticleVis =
+        Math.min(smoothstep(-0.42, -0.2, dF), 1 - smoothstep(0.3, 0.48, dF)) *
+        window01(local, TL.s0 - 0.01, TL.s1 + 0.01, 0.02)
 
       // ---- post + sky: energetic in/out beats, calm holds ----
       const inBeat = 1 - smoothstep(0, 0.055, local)
       const out = segment(local, TL.s1, 1)
       const travel = Math.sin(Math.PI * (Fc - Math.floor(Fc))) * (local > TL.s0 && local < TL.s1 ? 1 : 0)
       const p = ctx.post.params
+      // reduced motion keeps the beats but drops the streaks and fringing
+      const calm = ctx.reducedMotion ? 0.3 : 1
       p.bloomStrength = 0.85 + 0.35 * inBeat + 0.4 * out * out
       p.bloomRadius = 0.46 + 0.2 * inBeat
       p.exposure = 1 + 0.12 * inBeat + 0.2 * out * out
       p.flash = 0.3 * Math.pow(1 - smoothstep(0, 0.02, local), 2) + 0.3 * smoothstep(0.978, 1, local)
-      p.aberration = 0.0028 + 0.003 * travel + 0.01 * out * out + 0.006 * inBeat
+      p.aberration = 0.0028 + calm * (0.003 * travel + 0.01 * out * out + 0.006 * inBeat)
       p.vignette = 0.6
-      ctx.sky.params.warp = 0.55 * inBeat * inBeat + 0.85 * out * out * out
+      ctx.sky.params.warp = calm * (0.55 * inBeat * inBeat + 0.85 * out * out * out)
       ctx.sky.params.nebula = 0.75
       ctx.sky.params.stars = 0.9
 
       const tanV = Math.tan((pose.fov * Math.PI) / 360)
       scene.update(local, frame, {
         focus,
-        reticleWorld: kRet,
+        reticleWorld: kF,
         reticleVis,
         heal: segment(local, focusCenter(HACK) - 0.45 * SLOT, focusCenter(HACK) + 0.38 * SLOT),
         coreHeat: 1 + 0.35 * inBeat * inBeat,
@@ -216,9 +217,13 @@ export default function create(): Chapter {
       hud.update({
         local,
         F,
-        introVis,
-        panelVis,
-        railVis,
+        dt: frame.dt,
+        calm: ctx.reducedMotion,
+        introOn: local >= 0.036 && local < TL.s0 - 0.008,
+        panelOn,
+        railOn: local >= TL.s0 - 0.012 && local < TL.s1 + 0.008,
+        calloutOn: panelOn && local < TL.s1 && holding,
+        labelsOn: local > 0.035 && local < TL.s1 - 0.004,
         progress: clamp((F + 0.5) / COUNT),
         labels,
         theta,

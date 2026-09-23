@@ -53,6 +53,10 @@ vec3 heroEnv(vec3 d) {
   col += vec3(0.82, 0.93, 1.0) * 4.0 * heroStrip(d, normalize(vec3(0.92, 0.2, -0.25)), vec3(0.0, 1.0, 0.0), 0.8, 0.05, 0.06);
   col += vec3(0.75, 0.9, 1.0) * 2.5 * heroStrip(d, normalize(vec3(0.1, 0.95, -0.2)), vec3(1.0, 0.0, 0.0), 0.9, 0.05, 0.05);
   col += vec3(0.25, 1.0, 0.6) * 0.9 * heroStrip(d, normalize(vec3(-0.9, -0.1, 0.1)), vec3(0.0, 1.0, 0.0), 0.5, 0.05, 0.06);
+  // diagonal reflection card behind the viewer: the front faces carry one soft
+  // sheen that sweeps across the mark as the camera swings into the payoff
+  col += vec3(0.86, 0.95, 1.0) * 2.2 * heroStrip(d, normalize(vec3(0.4, -0.02, 1.0)), vec3(0.62, 0.78, 0.0), 0.62, 0.028, 0.045);
+  col += vec3(0.86, 0.95, 1.0) * 0.12 * heroStrip(d, normalize(vec3(0.4, -0.02, 1.0)), vec3(0.62, 0.78, 0.0), 0.7, 0.14, 0.2);
   return col;
 }
 `

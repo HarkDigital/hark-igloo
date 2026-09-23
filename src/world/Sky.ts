@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import type { Frame } from '../core/types'
 import { NOISE, FBM } from '../core/glsl'
 import { rng } from '../core/math'
+import { flushBakes } from './bakeQueue'
 
 /**
  * Always-on space backdrop, centered on the camera so it reads as infinitely
@@ -479,6 +480,8 @@ export class Sky {
 
   update(frame: Frame, camera: THREE.PerspectiveCamera) {
     if (!this.baked && this.renderer) this.bake(this.renderer)
+    // planet surfaces etc. bake here, outside any render, before the reveal
+    if (this.renderer) flushBakes(this.renderer)
 
     const k = 1 - Math.exp(-4 * frame.dt)
     for (const key of Object.keys(this.params) as (keyof SkyParams)[]) {

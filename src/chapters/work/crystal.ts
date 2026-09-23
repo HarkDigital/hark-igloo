@@ -239,17 +239,21 @@ ${ENV}
 ${EDGES}
 
 vec3 panelShade(vec2 uv, vec2 dx, vec2 dy, float back) {
-  vec3 tex = textureGrad(uMap, uv, dx, dy).rgb;
+  // a gentle negative LOD bias (the anisotropic filter keeps it clean) so the
+  // sealed site reads crisp instead of one mip too soft
+  vec3 tex = textureGrad(uMap, uv, dx * 0.7, dy * 0.7).rgb;
   float lum = dot(tex, vec3(0.2126, 0.7152, 0.0722));
   vec3 dormant = vec3(lum) * vec3(0.5, 1.0, 0.8) * 0.12 + SIGNAL * 0.004;
-  vec3 live = tex * 0.6;
+  // soft shoulder: white page areas sit under the bloom threshold, so the
+  // screenshot glows like a display instead of blowing out
+  vec3 live = tex * mix(0.62, 0.46, smoothstep(0.5, 1.0, lum));
   float y = 1.0 - uv.y;
   float sweep = mix(-0.1, 1.1, uActive);
   float on = 1.0 - smoothstep(sweep - 0.05, sweep, y);
   vec3 c = mix(dormant, live, on);
   float band = exp(-abs(y - sweep) * 70.0) * (1.0 - abs(uActive * 2.0 - 1.0));
   c += SIGNAL * band * 1.6;
-  c *= 0.95 + 0.05 * sin(uv.y * 620.0 - uTime * 3.0);
+  c *= 0.97 + 0.03 * sin(uv.y * 620.0 - uTime * 3.0);
   vec2 e = min(uv, 1.0 - uv) * uPanel * 2.0;
   float d = min(e.x, e.y);
   c += mix(vec3(0.75, 1.0, 0.9), SIGNAL, 0.5) * exp(-d * 120.0) * (0.3 + 0.75 * uActive);

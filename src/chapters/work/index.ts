@@ -45,11 +45,16 @@ const NF = FEATURED.length
 // ---- timeline
 const F0 = 0.06
 const FW = (0.84 - F0) / NF
-const HOLD = 0.24
+const HOLD = 0.26
 const CREEP = 0.12
 const FIN_ARRIVE = 0.885
 const OUT0 = 0.955
 const centerOf = (i: number) => F0 + FW * (i + 0.5)
+/** a project's HUD is on while |l - center| < SHOW·FW (generous: ~72% of its slot) */
+const SHOW = 0.36
+const HYST = 0.015
+const INTRO_END = centerOf(0) - SHOW * FW
+const FIN_ON = 0.856
 
 // ---- world layout
 const PANEL = new THREE.Vector2(1.3, 0.8125) // half extents: a 16:10 screen 2.6 wide
@@ -76,6 +81,37 @@ const host = (url: string) => {
   }
 }
 const pad2 = (n: number) => String(n).padStart(2, '0')
+const code = (i: number) => `ARTIFACT_${pad2(i + 1)}`
+
+/**
+ * A time-based HUD beat. Scroll decides *whether* a block should be showing;
+ * the fade and the text decode then run on the clock, so every label settles
+ * to fully readable text within ~0.8s of the scroll coming to rest.
+ */
+class Beat {
+  on = false
+  v = 0
+  since = -1e9
+  step(on: boolean, time: number, dt: number, tin: number, tout: number) {
+    if (on && !this.on) this.since = time
+    this.on = on
+    this.v = on ? Math.min(1, this.v + dt / tin) : Math.max(0, this.v - dt / tout)
+    return this.v
+  }
+  /** seconds since this beat last switched on */
+  age(time: number) {
+    return time - this.since
+  }
+  /** restart the decode clock (content changed while showing) */
+  restart(time: number) {
+    this.since = time
+  }
+  reset() {
+    this.on = false
+    this.v = 0
+    this.since = -1e9
+  }
+}
 
 /** Continuous "station" coordinate: -1 = entry, 0..NF-1 = crystals, NF = finale. */
 function stationX(l: number): number {
@@ -212,6 +248,7 @@ function evalPose(l: number, lay: Layout, out: CamState) {
 
 interface Card {
   root: HTMLDivElement
+  shade: HTMLDivElement
   parts: HTMLElement[]
   code: HTMLElement
   name: HTMLElement
@@ -221,6 +258,9 @@ interface Card {
 function buildCard(stage: HTMLElement, item: WorkItem, i: number, facets: number): Card {
   const side = sideOf(i)
   const root = el('div', `wk-card ${side > 0 ? 'is-left' : 'is-right'}`, undefined, stage)
+  // soft falloff behind the copy so drifting debris never fights the type
+  const shade = el('div', 'wk-shade', undefined, root)
+  shade.setAttribute('aria-hidden', 'true')
   const meta = el('div', 'wk-meta', undefined, root)
   meta.setAttribute('aria-hidden', 'true')
   const code = el('span', 'wk-code', '', meta)
@@ -251,7 +291,7 @@ function buildCard(stage: HTMLElement, item: WorkItem, i: number, facets: number
   el('span', 'wk-arrow', '↗', a).setAttribute('aria-hidden', 'true')
   const tele = el('span', 'wk-tele', `SRC // ${host(item.url)} · FACETS ${facets}`, row)
   tele.setAttribute('aria-hidden', 'true')
-  return { root, parts: [meta, h, ind, blurb, tags, row], code, name, tele }
+  return { root, shade, parts: [meta, h, ind, blurb, tags, row], code, name, tele }
 }
 
 // ---------------------------------------------------------------- chapter
@@ -266,7 +306,7 @@ interface Feat {
   card: Card
   probes: Probe[]
   probeText: ((time: number) => [string, string])[]
-  vis: number
+  beat: Beat
 }
 
 interface Mini {
@@ -278,6 +318,7 @@ interface Mini {
   dir: number
   dy: number
   appear: number
+  beat: Beat
 }
 
 class WorkChapter implements Chapter {
@@ -301,8 +342,6 @@ class WorkChapter implements Chapter {
   private euler = new THREE.Euler()
   private quat = new THREE.Quaternion()
   private v = new THREE.Vector3()
-  private local = 0
-  private finVis = 0
   private stage!: HTMLElement
   private scrim!: HTMLDivElement
   private intro!: HTMLDivElement
@@ -312,6 +351,20 @@ class WorkChapter implements Chapter {
   private reduced = false
   private sheet = false
   private finRect: { left: number; top: number; right: number; bottom: number } | null = null
+  // time-based HUD beats
+  private introBeat = new Beat()
+  private finBeat = new Beat()
+  private trBeat = new Beat()
+  private active = -1
+  private trSeg = -1
+  private tr!: {
+    root: HTMLDivElement
+    from: HTMLSpanElement
+    to: HTMLSpanElement
+    next: HTMLSpanElement
+    track: HTMLSpanElement
+    txt: [string, string, string]
+  }
 
   async init(ctx: ChapterContext) {
     this.stage = ctx.stage
@@ -342,6 +395,19 @@ class WorkChapter implements Chapter {
     this.intro = el('div', 'wk-intro-in', undefined, introWrap)
     this.introText = el('span', 'wk-intro-text', '', this.intro)
 
+    // transit readout: anchors every scroll position between two artifacts
+    const trRoot = el('div', 'wk-transit', undefined, stage)
+    trRoot.setAttribute('aria-hidden', 'true')
+    const trRow = el('div', 'wk-tr-row', undefined, trRoot)
+    const trFrom = el('span', 'wk-tr-id', '', trRow)
+    const trTrack = el('span', 'wk-tr-track', undefined, trRow)
+    el('i', 'wk-tr-fill', undefined, trTrack)
+    el('i', 'wk-tr-dot', undefined, trTrack)
+    const trTo = el('span', 'wk-tr-id is-to', '', trRow)
+    const trNext = el('span', 'wk-tr-next', '', trRoot)
+    this.tr = { root: trRoot, from: trFrom, to: trTo, next: trNext, track: trTrack, txt: ['', '', ''] }
+    reveal(trRoot, 0, 0)
+
     // ---- featured crystals
     FEATURED.forEach((item, i) => {
       const side = sideOf(i)
@@ -364,7 +430,7 @@ class WorkChapter implements Chapter {
         () => [`SRC // ${host(item.url)}`, '● LIVE · 200 OK'],
         () => [`FACETS ${hull.facets}`, 'IOR 1.46 · DISP 0.09'],
         t => {
-          const n = Math.floor(t * 3)
+          const n = Math.floor(t * 1.5)
           const sig = -41.2 - ((Math.sin(n * 12.9898 + seedN) * 43758.5453) % 1 + 1) % 1 * 2.4
           const temp = 2.72 + (((Math.sin(n * 78.233 + seedN) * 12543.21) % 1) + 1) % 1 * 0.019
           return [`SIG ${sig.toFixed(2)} DB`, `TEMP ${temp.toFixed(3)} K`]
@@ -384,7 +450,7 @@ class WorkChapter implements Chapter {
         card,
         probes,
         probeText,
-        vis: 0,
+        beat: new Beat(),
       })
     })
 
@@ -468,6 +534,7 @@ class WorkChapter implements Chapter {
         dir: Math.cos(theta) >= 0 ? 1 : -1,
         dy: Math.sin(theta) >= 0 ? 26 : -26,
         appear: 0,
+        beat: new Beat(),
       })
     })
 
@@ -534,11 +601,33 @@ class WorkChapter implements Chapter {
     }
   }
 
+  onEnter() {
+    // replay every HUD beat from scratch when the chapter comes back
+    this.introBeat.reset()
+    this.finBeat.reset()
+    this.trBeat.reset()
+    this.active = -1
+    this.trSeg = -1
+    for (const c of this.feats) c.beat.reset()
+    for (const m of this.minis) m.beat.reset()
+    this.finRect = null
+  }
+
+  /** Which featured project owns the HUD at this scroll position (-1 = none). */
+  private pickActive(l: number): number {
+    if (l >= FIN_ON) return -1
+    for (const c of this.feats) {
+      const ap = Math.abs((l - centerOf(c.i)) / FW)
+      if (ap < SHOW || (c.i === this.active && ap < SHOW + HYST)) return c.i
+    }
+    return -1
+  }
+
   update(l: number, f: Frame, ctx: ChapterContext) {
-    this.local = l
     this.ensureLayout(f)
     evalPose(l, this.lay, this.cam)
     const time = f.time
+    const dt = Math.min(Math.max(f.dt, 0), 0.1)
     const calm = this.reduced ? 0.2 : 1
     if (!this.reduced) {
       this.cam.pos.x += Math.sin(time * 0.21) * 0.1
@@ -547,6 +636,17 @@ class WorkChapter implements Chapter {
 
     const inT = segment(l, 0, F0)
     const outT = segment(l, OUT0, 1)
+
+    // ---- HUD beats (scroll picks the target, the clock animates it)
+    const rm = this.reduced
+    this.active = this.pickActive(l)
+    const introOn = l < INTRO_END
+    const finOn = l >= FIN_ON && l < OUT0
+    const trOn = !introOn && this.active < 0 && l < FIN_ON
+    this.introBeat.step(introOn, time, dt, rm ? 0.2 : 0.35, 0.25)
+    this.finBeat.step(finOn, time, dt, rm ? 0.25 : 0.75, 0.22)
+    this.trBeat.step(trOn, time, dt, rm ? 0.2 : 0.3, 0.2)
+    for (const c of this.feats) c.beat.step(c.i === this.active, time, dt, rm ? 0.25 : 0.6, 0.28)
 
     // ---- sky + post
     const sky = ctx.sky.params
@@ -578,11 +678,11 @@ class WorkChapter implements Chapter {
       const ap = Math.abs(p)
       const on = p > -1.7 && p < 1.35 && l < FIN_ARRIVE + 0.02
       c.crystal.group.visible = on
-      c.vis = on ? 1 - smoothstep(HOLD - 0.03, HOLD + 0.1, ap) : 0
-      this.updateCard(c, c.vis)
+      this.updateCard(c, time)
       if (!on) continue
-      const focus = 1 - smoothstep(0.2, 0.5, ap)
-      const active = 1 - smoothstep(0.26, 0.56, ap)
+      // the hologram stays fully live for as long as its HUD is up
+      const focus = 1 - smoothstep(0.26, 0.55, ap)
+      const active = 1 - smoothstep(SHOW - 0.02, 0.62, ap)
       const spin = -1.9 * Math.sign(p) * smoothstep(0.12, 1.3, ap) - 0.3 * p
       const g = c.crystal.group
       g.position.copy(c.C)
@@ -602,28 +702,34 @@ class WorkChapter implements Chapter {
       u.uGlow.value = 0.45 + 0.55 * focus
       u.uEdge.value = 0.5 + 0.6 * focus + 0.6 * inT * (1 - inT) * 4 * (c.i === 0 ? 1 : 0)
       const dist = g.position.distanceTo(this.cam.pos)
-      u.uFade.value = Math.max(smoothstep(44, 24, dist), focus)
+      // the last artifact passes right under the lens on the way to the ring:
+      // let it dissolve instead of filling the frame
+      const handoff = c.i === NF - 1 ? 1 - smoothstep(0.36, 0.56, p) : 1
+      u.uFade.value = Math.max(smoothstep(44, 24, dist), focus) * handoff
+      g.visible = handoff > 0.001
     }
 
     // ---- finale ring
-    const ringOn = l > 0.78
+    const ringOn = l > 0.8
     this.ring.visible = ringOn
     this.flare.mesh.visible = l > 0.9
-    if (this.planet) this.planet.group.visible = ringOn
+    // the planet only rises once the last artifact has handed off (no photobomb)
+    const planetIn = smoothstep(0.828, 0.858, l)
+    if (this.planet) this.planet.group.visible = planetIn > 0.001
     const collapse = ease.inOutCubic(outT)
-    this.finVis = smoothstep(0.855, 0.89, l) * (1 - smoothstep(0.95, 0.972, l))
     if (ringOn) {
       this.orbit.uniforms.uFade.value = smoothstep(0.83, 0.89, l) * (1 - outT)
       this.orbit.uniforms.uTime.value = time * calm
       this.orbit.object.scale.setScalar(1 - collapse * 0.95)
       if (this.planet) {
-        this.planet.group.scale.setScalar(Math.max(0.02, 1 - collapse))
+        this.planet.group.scale.setScalar(Math.max(0.02, (0.55 + 0.45 * ease.outCubic(planetIn)) * (1 - collapse)))
         this.planet.update(f)
       }
       const camFin = this.lay.stations[NF + 1].pos
       for (const m of this.minis) {
-        const appear = ease.outCubic(segment(l, 0.815 + m.k * 0.007, 0.87 + m.k * 0.007))
+        const appear = ease.outCubic(segment(l, 0.815 + m.k * 0.006, 0.868 + m.k * 0.006))
         m.appear = appear
+        m.beat.step(finOn && appear > 0.5, time, dt, rm ? 0.2 : 0.4, 0.2)
         const theta = this.ringAngle(m.k, l) + collapse * 2.4
         const R = RING_R * (1 - collapse) * (0.8 + 0.2 * appear)
         const g = m.crystal.group
@@ -639,39 +745,85 @@ class WorkChapter implements Chapter {
         u.uGlow.value = 0.85
         u.uFade.value = 1 - outT * 0.3
       }
+    } else {
+      for (const m of this.minis) {
+        m.appear = 0
+        m.beat.step(false, time, dt, 0.4, 0.2)
+      }
     }
-    // the singularity
     // the singularity: a hot pinpoint with an anamorphic streak that swallows the ring
     this.flare.uniforms.uSize.value = lerp(0.35, 2.2, outT)
     this.flare.uniforms.uIntensity.value = smoothstep(0, 0.35, outT) * (0.7 + 1.8 * outT)
 
-    // ---- DOM: intro + finale + scrim
-    const introV = (1 - smoothstep(0.035, 0.075, l)) * smoothstep(0.0, 0.012, l + 0.012)
-    reveal(this.intro, introV, 0)
-    if (introV > 0) {
+    // ---- DOM: intro stamp
+    const iv = ease.outCubic(this.introBeat.v)
+    reveal(this.intro, iv, 0)
+    if (iv > 0) {
       const txt = `ARTIFACTS  //  ${pad2(WORK.length)} LIVE SITES`
-      this.introText.textContent = scrambleAt(txt, smoothstep(0.0, 0.035, l) * 1.05)
+      const s = this.introBeat.on && !rm ? scrambleAt(txt, this.introBeat.age(time) / 0.6) : txt
+      if (this.introText.textContent !== s) this.introText.textContent = s
     }
-    for (let k = 0; k < this.finParts.length; k++) reveal(this.finParts[k], smoothstep(k * 0.1, k * 0.1 + 0.6, this.finVis), 16)
-    this.fin.style.visibility = this.finVis > 0.002 ? 'visible' : 'hidden'
-    const cardMax = Math.max(this.finVis, ...this.feats.map(c => c.vis))
-    reveal(this.scrim, this.sheet ? cardMax : 0, 0)
+
+    // ---- DOM: transit readout
+    this.updateTransit(l, time)
+
+    // ---- DOM: finale card
+    const fv = this.finBeat.v
+    for (let k = 0; k < this.finParts.length; k++) reveal(this.finParts[k], ease.outCubic(smoothstep(k * 0.1, k * 0.1 + 0.6, fv)), 16)
+    this.fin.style.visibility = fv > 0.002 ? 'visible' : 'hidden'
+    let cardMax = fv
+    for (const c of this.feats) cardMax = Math.max(cardMax, c.beat.v)
+    reveal(this.scrim, this.sheet ? ease.inOutQuad(cardMax) : 0, 0)
 
     this.group.updateMatrixWorld(true)
   }
 
-  private updateCard(c: Feat, vis: number) {
+  private updateTransit(l: number, time: number) {
+    const tr = this.tr
+    const b = this.trBeat
+    // the leg we're on: from the last artifact passed to the next stop
+    let seg = 0
+    for (let i = 0; i < NF; i++) if (l >= centerOf(i)) seg = i
+    if (b.on && seg !== this.trSeg) {
+      this.trSeg = seg
+      b.restart(time)
+      const last = seg >= NF - 1
+      tr.txt = [
+        code(seg),
+        last ? `ARTIFACTS ${pad2(NF + 1)}—${pad2(WORK.length)}` : code(seg + 1),
+        last ? `NEXT  //  ${pad2(REST.length)} MORE LIVE SITES` : `NEXT  //  ${FEATURED[seg + 1].name.toUpperCase()}`,
+      ]
+    }
+    const v = ease.outCubic(b.v)
+    reveal(tr.root, v, 8)
+    if (v <= 0) return
+    const a = b.on && !this.reduced ? b.age(time) : 99
+    const set = (node: HTMLElement, s: string) => {
+      if (node.textContent !== s) node.textContent = s
+    }
+    set(tr.from, scrambleAt(tr.txt[0], a / 0.4))
+    set(tr.to, scrambleAt(tr.txt[1], (a - 0.08) / 0.45))
+    set(tr.next, scrambleAt(tr.txt[2], (a - 0.15) / 0.55))
+    // progress along the leg (scroll-driven, no text)
+    const s0 = centerOf(seg) + SHOW * FW
+    const s1 = seg >= NF - 1 ? FIN_ON : centerOf(seg + 1) - SHOW * FW
+    tr.track.style.setProperty('--p', clamp((l - s0) / (s1 - s0)).toFixed(3))
+  }
+
+  private updateCard(c: Feat, time: number) {
     const card = c.card
+    const vis = c.beat.v
     card.root.style.visibility = vis > 0.002 ? 'visible' : 'hidden'
     // always drive every part: reveal() writes inline visibility, which would
     // otherwise override the hidden parent after a jump
-    for (let k = 0; k < card.parts.length; k++) reveal(card.parts[k], smoothstep(k * 0.07, k * 0.07 + 0.5, vis), 18)
+    reveal(card.shade, ease.inOutQuad(vis), 0)
+    for (let k = 0; k < card.parts.length; k++) reveal(card.parts[k], ease.outCubic(smoothstep(k * 0.07, k * 0.07 + 0.5, vis)), 18)
     if (vis <= 0.002) return
-    const d = smoothstep(0.05, 0.85, vis)
-    const code = `ARTIFACT_${pad2(c.i + 1)}`
-    const cs = scrambleAt(code, d * 1.15)
+    // decode on the clock; once resolved (or while fading out) the text is exact
+    const a = c.beat.on && !this.reduced ? c.beat.age(time) : 99
+    const cs = scrambleAt(code(c.i), a / 0.45)
     if (card.code.textContent !== cs) card.code.textContent = cs
-    const ns = scrambleAt(c.item.name, d * 1.08 - 0.08)
+    const ns = scrambleAt(c.item.name, (a - 0.1) / 0.6)
     if (card.name.textContent !== ns) card.name.textContent = ns
   }
 
@@ -719,13 +871,15 @@ class WorkChapter implements Chapter {
     const h = f.height
     const padX = Math.max(16, Math.min(44, w * 0.034))
     const time = f.time
-    // featured telemetry
+    // featured telemetry: reveal + decode ride the card's clock
     for (const c of this.feats) {
       if (!c.probes.length) continue
-      const show = !this.sheet && c.crystal.group.visible && c.vis > 0.002
+      const vis = c.beat.v
+      const show = !this.sheet && c.crystal.group.visible && vis > 0.002
+      const age = c.beat.on && !this.reduced ? c.beat.age(time) : 99
       for (let k = 0; k < c.probes.length; k++) {
         const pr = c.probes[k]
-        const pv = show ? smoothstep(0.25 + k * 0.12, 0.75 + k * 0.12, c.vis) : 0
+        const pv = show ? ease.outCubic(smoothstep(0.2 + k * 0.1, 0.6 + k * 0.1, vis)) : 0
         if (pv <= 0.002) {
           pr.place(0, 0, 0, 1, 0, 0, w, h)
           continue
@@ -736,8 +890,8 @@ class WorkChapter implements Chapter {
           pr.place(0, 0, 0, 1, 0, 0, w, h)
           continue
         }
-        const [l1, l2] = c.probeText[k](time)
-        const t = smoothstep(0.1, 0.9, pv) * 1.3
+        const [l1, l2] = c.probeText[k](this.reduced ? 0 : time)
+        const t = ((age - 0.12 - k * 0.1) / 0.42) * 1.15
         const s1 = scrambleAt(l1, t)
         const s2 = scrambleAt(l2, t - 0.15)
         const e1 = pr.label.children[0] as HTMLElement
@@ -750,20 +904,14 @@ class WorkChapter implements Chapter {
         else pr.place(x, y, pv, s, 70, 42, w, h, padX)
       }
     }
-    // the nine (labels steer clear of the finale card)
-    if (!this.finRect && this.finVis > 0.5 && !this.sheet) {
-      let r: { left: number; top: number; right: number; bottom: number } | null = null
-      for (const part of this.finParts) {
-        const b = part.getBoundingClientRect()
-        if (!b.width || !b.height) continue
-        r = r
-          ? { left: Math.min(r.left, b.left), top: Math.min(r.top, b.top), right: Math.max(r.right, b.right), bottom: Math.max(r.bottom, b.bottom) }
-          : { left: b.left, top: b.top, right: b.right, bottom: b.bottom }
-      }
-      if (r) this.finRect = { left: r.left - 12, top: r.top - 20, right: r.right + 16, bottom: r.bottom + 8 }
+    // the nine (labels steer clear of the finale card). The wrapper itself is
+    // never transformed, so its box is the settled layout even mid-reveal.
+    if (!this.finRect && this.finBeat.on && !this.sheet) {
+      const b = this.fin.getBoundingClientRect()
+      if (b.width && b.height) this.finRect = { left: b.left - 12, top: b.top - 20, right: b.right + 16, bottom: b.bottom + 8 }
     }
     for (const m of this.minis) {
-      const base = m.appear * this.finVis
+      const base = m.beat.v
       const onDesk = !this.sheet && base > 0.002 && m.crystal.group.visible
       const onSheet = this.sheet && base > 0.002 && m.crystal.group.visible
       if (!onDesk) m.probe.place(0, 0, 0, 1, 0, 0, w, h)
@@ -771,7 +919,7 @@ class WorkChapter implements Chapter {
       if (!onDesk && !onSheet) continue
       m.crystal.group.getWorldPosition(this.v)
       const [x, y, front] = this.project(this.v, f)
-      const vis = front ? smoothstep(0.3, 1, base) : 0
+      const vis = front ? ease.outCubic(base) : 0
       if (onDesk) m.probe.place(x, y, vis, m.dir, 58, m.dy, w, h, padX, this.finRect)
       if (onSheet) m.num.place(x, y, vis, m.dir, 20, m.dy * 0.6, w, h, 10)
     }

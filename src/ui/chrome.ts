@@ -10,7 +10,7 @@ import { markSvg } from './mark'
  *
  *   top-left      mark + HARK.DIGITAL wordmark + locale sub-line (→ back to start)
  *   top-right     Services · Work · Contact + "Start a project" pill
- *                 (≤ 820px: MENU button → full-screen overlay menu)
+ *                 (≤ 900px: MENU button → full-screen overlay menu)
  *   bottom-left   SOUND toggle with a tiny equalizer
  *   bottom-right  chapter index (decodes on change), progress rail with one
  *                 clickable tick per chapter, live telemetry line
@@ -26,10 +26,11 @@ const NAV = [
 ]
 
 /**
- * Where a nav jump lands inside each chapter (local progress). Local 0 sits
- * exactly on the glitch-cut peak, so land just past the cut window.
+ * Where a nav jump lands inside each chapter (local progress): the first
+ * point where the chapter's headline has fully resolved. Local 0 sits exactly
+ * on the glitch-cut peak, so anything unlisted lands just past the cut window.
  */
-const LANDING: Record<string, number> = { hero: 0 }
+const LANDING: Record<string, number> = { hero: 0, services: 0.08, work: 0.13, contact: 0.3 }
 const landingFor = (id: string, lengthVh: number) => LANDING[id] ?? Math.min(0.2, Math.max(0.06, 0.34 / lengthVh))
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
@@ -120,6 +121,13 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
       </div>
     </div>
   </div>`
+
+  // header-first tab order: the chrome (brand, nav, sound, chapter rail) comes
+  // before the active chapter's content. Stacking is set by z-index, not order.
+  const stagesEl = document.getElementById('stages')
+  if (stagesEl && stagesEl.parentNode === root.parentNode && root.compareDocumentPosition(stagesEl) & Node.DOCUMENT_POSITION_PRECEDING) {
+    stagesEl.parentNode!.insertBefore(root, stagesEl)
+  }
 
   const $ = <T extends Element = HTMLElement>(s: string) => root.querySelector<T>(s)!
   const chrome = $('.chrome')
@@ -215,15 +223,21 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
       f[next]?.focus()
     }
   })
-  matchMedia('(min-width: 821px)').addEventListener('change', e => {
+  matchMedia('(min-width: 901px)').addEventListener('change', e => {
     if (e.matches) closeMenu(false)
   })
 
   // -------------------------------------------------------------------- reveal
 
+  let currentLabel = ''
   const revealChrome = () => {
     if (chrome.classList.contains('is-in')) return
     chrome.classList.add('is-in')
+    // the first chapter label decoded under the loader; decode it again in view
+    if (currentLabel) {
+      ixLabel.clear()
+      ixLabel.play(currentLabel, { duration: 0.8, delay: 0.55 })
+    }
     const subText = sub.dataset.text ?? ''
     new Scramble(sub).play(subText, { duration: 1.1, delay: 0.35 })
     navEls.forEach((a, i) => {
@@ -261,7 +275,8 @@ export function createChrome(root: HTMLElement, engine: Engine, sound: Sound) {
         const first = lastIndex < 0
         lastIndex = state.index
         ixNum.textContent = pad2(state.index + 1)
-        ixLabel.play(slot.def.label.toUpperCase(), { duration: first ? 0.9 : 0.55, delay: first ? 0.6 : 0 })
+        currentLabel = slot.def.label.toUpperCase()
+        ixLabel.play(currentLabel, { duration: first ? 0.9 : 0.55, delay: first ? 0.6 : 0 })
         tickEls.forEach((t, i) => {
           t.classList.toggle('is-active', i === state.index)
           t.classList.toggle('is-past', i < state.index)

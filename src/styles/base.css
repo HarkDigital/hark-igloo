@@ -263,6 +263,11 @@ a {
   box-shadow: 0 0 28px rgba(0, 255, 133, 0.45);
   outline: none;
 }
+/* keyboard focus gets a real ring, not just the hover glow */
+.hud-btn:focus-visible {
+  outline: 1px solid var(--signal);
+  outline-offset: 4px;
+}
 .hud-btn--ghost {
   background: rgba(2, 3, 4, 0.35);
   color: var(--paper);

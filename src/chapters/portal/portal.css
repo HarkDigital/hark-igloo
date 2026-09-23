@@ -95,6 +95,7 @@
 }
 .stage-portal .gt-tele-row dt {
   color: var(--faint);
+  white-space: nowrap;
 }
 .stage-portal .gt-tele-row dd {
   margin: 0;
@@ -132,7 +133,7 @@
   content: '';
   position: absolute;
   inset: -40px -70px;
-  background: radial-gradient(closest-side, rgba(2, 3, 4, 0.72), rgba(2, 3, 4, 0.35) 55%, transparent);
+  background: radial-gradient(closest-side, rgba(2, 3, 4, 0.8), rgba(2, 3, 4, 0.5) 55%, transparent);
   z-index: -1;
 }
 .stage-portal .gt-cue-title {
@@ -180,6 +181,13 @@
   white-space: pre;
 }
 
+/* narrow landscape: keep the telemetry panel compact */
+@media (max-width: 1180px) {
+  .stage-portal .gt-tele-row.is-extra {
+    display: none;
+  }
+}
+
 /* ---------------- phones / portrait ---------------- */
 @media (max-width: 767px), (max-aspect-ratio: 4/5) {
   .stage-portal .gt-side {
@@ -196,7 +204,38 @@
     bottom: calc(var(--safe-bottom) + 4px);
   }
   .stage-portal .gt-panel {
+    position: relative;
     width: 100%;
+  }
+  /* soft scrims so flying segments never sit on top of the readouts;
+     they live on the panels, so they fade in and out with them */
+  .stage-portal .gt-panel::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    left: calc(-1 * var(--gutter));
+    right: calc(-1 * var(--gutter));
+    pointer-events: none;
+  }
+  .stage-portal .gt-side--left .gt-panel::before {
+    top: calc(-1 * var(--safe-top));
+    bottom: -48px;
+    background: linear-gradient(
+      to bottom,
+      rgba(2, 3, 4, 0.7) 0%,
+      rgba(2, 3, 4, 0.62) 62%,
+      rgba(2, 3, 4, 0)
+    );
+  }
+  .stage-portal .gt-panel--tele::before {
+    top: -56px;
+    bottom: calc(-1 * var(--safe-bottom) - 4px);
+    background: linear-gradient(
+      to top,
+      rgba(2, 3, 4, 0.9) 0%,
+      rgba(2, 3, 4, 0.8) 58%,
+      rgba(2, 3, 4, 0)
+    );
   }
   .stage-portal .gt-panel .hud-eyebrow {
     margin-bottom: 10px;

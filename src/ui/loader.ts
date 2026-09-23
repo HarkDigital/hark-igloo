@@ -1,4 +1,4 @@
-import { Scramble } from '../core/scramble'
+import { scrambleAt } from '../core/scramble'
 import { MARK_PATHS, MARK_VIEWBOX } from './mark'
 import { BRAND } from '../content'
 
@@ -16,6 +16,8 @@ import { BRAND } from '../content'
 
 const MIN_DISPLAY = 1.6 // seconds before the counter may reach 100 (lets the mark finish tracing)
 const STATUS_HOLD = 0.36 // seconds each status line holds before the next decodes
+const STATUS_DECODE = 0.3 // seconds for a status line to type + resolve
+const SLOW_AFTER = 9 // seconds without finish() before the status admits a slow link
 const STATUS: [number, string][] = [
   [0, 'Initializing renderer'],
   [0.16, 'Calibrating optics'],
@@ -72,7 +74,19 @@ export function createLoader(root: HTMLElement, { skip = false } = {}) {
   const sat = root.querySelector<SVGGElement>('.ld-sat-rot')!
   const bar = root.querySelector<HTMLElement>('.ld-bar i')!
   const sig = root.querySelector<HTMLElement>('.ld-sig')!
-  const status = new Scramble(root.querySelector<HTMLElement>('.ld-status-txt')!)
+  const statusEl = root.querySelector<HTMLElement>('.ld-status-txt')!
+  // terminal-style status: types left to right, caret rides the last glyph
+  let statusText = ''
+  let statusT0 = 0
+  const setStatus = (text: string) => {
+    statusText = text.toUpperCase()
+    statusT0 = performance.now() / 1000
+  }
+  const renderStatus = (now: number) => {
+    const t = reduced ? 1 : (now - statusT0) / STATUS_DECODE
+    const s = scrambleAt(statusText, t).replace(/\s+$/, '')
+    if (statusEl.textContent !== s) statusEl.textContent = s
+  }
 
   const t0 = performance.now()
   let target = 0
@@ -80,6 +94,7 @@ export function createLoader(root: HTMLElement, { skip = false } = {}) {
   let statusIx = -1
   let statusAt = -1
   let finishing = false
+  let slow = false
   let raf = 0
   let last = t0
 
@@ -94,11 +109,18 @@ export function createLoader(root: HTMLElement, { skip = false } = {}) {
     for (let i = 0; i < STATUS.length; i++) if (shown >= STATUS[i][0]) ix = i
     // step through the lines one at a time so each one resolves before the next
     const now = performance.now() / 1000
-    if (!finishing && ix > statusIx && now - statusAt > STATUS_HOLD) {
+    if (!finishing && !slow && ix > statusIx && now - statusAt > STATUS_HOLD) {
       statusIx++
       statusAt = now
-      status.play(STATUS[statusIx][1].toUpperCase(), { duration: 0.3 })
+      setStatus(STATUS[statusIx][1])
     }
+    if (!finishing && !slow && now - t0 / 1000 > SLOW_AFTER) {
+      // never look frozen on a slow link: say so, keep the creep going
+      slow = true
+      setStatus('Weak signal · holding')
+      sig.textContent = 'WEAK'
+    }
+    renderStatus(now)
   }
 
   const tick = (now: number) => {
@@ -137,7 +159,7 @@ export function createLoader(root: HTMLElement, { skip = false } = {}) {
         while (shown < 1 && performance.now() - land < 900) await wait(30)
         shown = 1
         render()
-        status.play('SIGNAL LOCKED', { duration: 0.3 })
+        setStatus('Signal locked')
         sig.textContent = 'LOCKED'
         wrap.dataset.phase = 'lock'
         await wait(reduced ? 120 : 380)

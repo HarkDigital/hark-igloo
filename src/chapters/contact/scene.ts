@@ -24,7 +24,7 @@ export function markUniforms() {
     uSize: { value: 14 },
     uPointer: { value: new THREE.Vector3(99, 99, 0) },
     uPointerAmt: { value: 0 },
-    uPointerR: { value: 0.16 },
+    uPointerR: { value: 0.15 },
     uPulse: { value: new THREE.Vector4(0, 0, 0, 99) },
     uScanY: { value: -9 },
     uBright: { value: 1 },
@@ -78,8 +78,9 @@ const MOTION = /* glsl */ `
     vec2 d = p.xy - uPointer.xy;
     float dist = length(d);
     float f = exp(-(dist * dist) / (uPointerR * uPointerR)) * uPointerAmt;
-    p.xy += (d / max(dist, 1e-4)) * f * uPointerR * 0.9;
-    p.z += f * (0.08 + s.y * 0.16);
+    // soft lens-like dent: particles part around the cursor and lift a little
+    p.xy += (d / max(dist, 1e-4)) * f * uPointerR * 0.62;
+    p.z += f * (0.06 + s.y * 0.14);
     // click shockwave
     float age = uPulse.w;
     float R = age * 1.1;
@@ -312,7 +313,7 @@ export function createPlatform(mobile: boolean) {
       depthWrite: false,
       side: THREE.DoubleSide,
     })
-  const rings: THREE.Mesh[] = []
+  const rings: THREE.Mesh<THREE.RingGeometry, THREE.ShaderMaterial>[] = []
   const specs = [
     { r0: 0.98, r1: 0.995, y: 0.05, dashes: 3, duty: 0.8, b: 0.8 },
     { r0: 1.2, r1: 1.212, y: 0.12, dashes: 64, duty: 0.55, b: 0.5 },
@@ -322,6 +323,8 @@ export function createPlatform(mobile: boolean) {
     const m = new THREE.Mesh(new THREE.RingGeometry(sp.r0, sp.r1, 192, 1), ringMat(sp.dashes, sp.duty, sp.b))
     m.rotation.x = -Math.PI / 2
     m.position.y = sp.y
+    m.userData.duty = sp.duty
+    m.userData.bright = sp.b
     rings.push(m)
     group.add(m)
   }
